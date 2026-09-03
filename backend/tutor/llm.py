@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 20
 MAX_TOKENS = 700
+
+# Gemini is the default because it's the provider with a usable free tier.
+# DeepSeek and Sarvam stay registered so switching back is one env var.
+DEFAULT_PROVIDER = 'gemini'
+DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash'
 # Low but not zero: identical phrasing every session feels canned, wild
 # variation makes the distractors unreliable.
 TEMPERATURE = 0.4
@@ -142,6 +147,57 @@ def _call_deepseek(system_prompt, user_content):
     return response.choices[0].message.content or ''
 
 
+GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
+
+
+def _call_gemini(system_prompt, user_content):
+    import requests
+
+    api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        raise LLMError('GEMINI_API_KEY is not set')
+
+    model = os.getenv('GEMINI_MODEL', DEFAULT_GEMINI_MODEL)
+    response = requests.post(
+        f'{GEMINI_BASE_URL}/models/{model}:generateContent',
+        # The key goes in a header rather than the query string Google's docs
+        # sometimes show, so it stays out of proxy and access logs.
+        headers={'x-goog-api-key': api_key, 'Content-Type': 'application/json'},
+        json={
+            'system_instruction': {'parts': [{'text': system_prompt}]},
+            'contents': [{'role': 'user', 'parts': [{'text': user_content}]}],
+            'generationConfig': {
+                'temperature': TEMPERATURE,
+                'maxOutputTokens': MAX_TOKENS,
+                # Gemini's native JSON mode - the equivalent of OpenAI's
+                # response_format={'type': 'json_object'}.
+                'responseMimeType': 'application/json',
+            },
+        },
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+
+    candidates = payload.get('candidates') or []
+    if not candidates:
+        # Almost always a safety block or a prompt-level rejection.
+        reason = (payload.get('promptFeedback') or {}).get('blockReason', 'no candidates')
+        raise LLMError(f'Gemini returned no candidates ({reason})')
+
+    finish_reason = candidates[0].get('finishReason')
+    parts = (candidates[0].get('content') or {}).get('parts') or []
+    text = ''.join(
+        str(part.get('text') or '') for part in parts if isinstance(part, dict)
+    ).strip()
+
+    if not text:
+        raise LLMError(f'Gemini returned no text (finishReason={finish_reason})')
+    if finish_reason == 'MAX_TOKENS':
+        logger.warning('Gemini hit the token cap; JSON may be truncated')
+    return text
+
+
 def _call_sarvam(system_prompt, user_content):
     # Called over plain REST on purpose: the `sarvamai` PyPI package is still
     # alpha, and this keeps the two providers structurally identical.
@@ -176,16 +232,18 @@ def _call_sarvam(system_prompt, user_content):
 
 
 PROVIDERS = {
+    'gemini': _call_gemini,
     'deepseek': _call_deepseek,
     'sarvam': _call_sarvam,
 }
 
 
 def active_provider():
-    name = (settings.LLM_PROVIDER or 'deepseek').strip().lower()
+    name = (settings.LLM_PROVIDER or DEFAULT_PROVIDER).strip().lower()
     if name not in PROVIDERS:
-        logger.warning('unknown LLM_PROVIDER %r, falling back to deepseek', name)
-        return 'deepseek'
+        logger.warning(
+            'unknown LLM_PROVIDER %r, falling back to %s', name, DEFAULT_PROVIDER)
+        return DEFAULT_PROVIDER
     return name
 
 

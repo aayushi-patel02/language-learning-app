@@ -6,6 +6,7 @@ layers hold up against the specific ways models malform output.
 """
 
 import json
+import os
 from unittest import mock
 
 from django.test import TestCase, override_settings
@@ -361,7 +362,96 @@ class EvaluateFreetextTests(TestCase):
         self.assertIn('La cuenta por favor', seen['user'])
 
 
+class GeminiTransportTests(TestCase):
+    """Gemini's envelope and failure modes differ from the OpenAI-shaped ones."""
+
+    def _run(self, json_body):
+        response = mock.Mock()
+        response.json.return_value = json_body
+        response.raise_for_status.return_value = None
+        with mock.patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key'}):
+            with mock.patch('requests.post', return_value=response) as posted:
+                return llm._call_gemini('system', 'user'), posted
+
+    def test_text_is_extracted_from_the_candidate(self):
+        text, _ = self._run({
+            'candidates': [{'content': {'parts': [{'text': '{"ok": true}'}]},
+                            'finishReason': 'STOP'}]
+        })
+        self.assertEqual(text, '{"ok": true}')
+
+    def test_multipart_responses_are_joined(self):
+        text, _ = self._run({
+            'candidates': [{'content': {'parts': [{'text': '{"a":'}, {'text': ' 1}'}]},
+                            'finishReason': 'STOP'}]
+        })
+        self.assertEqual(text, '{"a": 1}')
+
+    def test_missing_key_raises_before_any_request(self):
+        with mock.patch.dict(os.environ, {'GEMINI_API_KEY': ''}):
+            with mock.patch('requests.post') as posted:
+                with self.assertRaises(llm.LLMError):
+                    llm._call_gemini('system', 'user')
+        posted.assert_not_called()
+
+    def test_safety_block_raises_with_the_reason(self):
+        with self.assertRaises(llm.LLMError) as caught:
+            self._run({'candidates': [], 'promptFeedback': {'blockReason': 'SAFETY'}})
+        self.assertIn('SAFETY', str(caught.exception))
+
+    def test_no_candidates_raises(self):
+        with self.assertRaises(llm.LLMError):
+            self._run({})
+
+    def test_empty_parts_raises_with_finish_reason(self):
+        with self.assertRaises(llm.LLMError) as caught:
+            self._run({'candidates': [{'content': {'parts': []},
+                                       'finishReason': 'RECITATION'}]})
+        self.assertIn('RECITATION', str(caught.exception))
+
+    def test_api_key_is_sent_as_a_header_not_in_the_url(self):
+        # A key in a query string leaks into proxy and access logs.
+        _, posted = self._run({
+            'candidates': [{'content': {'parts': [{'text': '{}'}]},
+                            'finishReason': 'STOP'}]
+        })
+        url = posted.call_args.args[0]
+        headers = posted.call_args.kwargs['headers']
+        self.assertNotIn('test-key', url)
+        self.assertNotIn('key=', url)
+        self.assertEqual(headers['x-goog-api-key'], 'test-key')
+
+    def test_json_mode_is_requested(self):
+        _, posted = self._run({
+            'candidates': [{'content': {'parts': [{'text': '{}'}]},
+                            'finishReason': 'STOP'}]
+        })
+        body = posted.call_args.kwargs['json']
+        self.assertEqual(
+            body['generationConfig']['responseMimeType'], 'application/json')
+        self.assertEqual(body['system_instruction']['parts'][0]['text'], 'system')
+
+    def test_configured_model_lands_in_the_url(self):
+        with mock.patch.dict(os.environ, {'GEMINI_MODEL': 'gemini-3-turbo'}):
+            _, posted = self._run({
+                'candidates': [{'content': {'parts': [{'text': '{}'}]},
+                                'finishReason': 'STOP'}]
+            })
+        self.assertIn('gemini-3-turbo:generateContent', posted.call_args.args[0])
+
+    @override_settings(DEMO_MODE=False, LLM_PROVIDER='gemini')
+    def test_gemini_failure_still_falls_back_to_a_usable_turn(self):
+        with raising_stub(RuntimeError('402 no quota')):
+            turn = llm.get_next_turn(DAILY_ROUTINE)
+        self.assertEqual(turn['provider'], 'fallback')
+        self.assertTrue(turn['tutor_message_es'])
+
+
 class ProviderSelectionTests(TestCase):
+    @override_settings(LLM_PROVIDER='gemini')
+    def test_gemini_selected(self):
+        self.assertEqual(llm.active_provider(), 'gemini')
+
     @override_settings(LLM_PROVIDER='deepseek')
     def test_deepseek_selected(self):
         self.assertEqual(llm.active_provider(), 'deepseek')
@@ -375,8 +465,12 @@ class ProviderSelectionTests(TestCase):
         self.assertEqual(llm.active_provider(), 'sarvam')
 
     @override_settings(LLM_PROVIDER='gpt-9')
-    def test_unknown_provider_falls_back_to_deepseek(self):
-        self.assertEqual(llm.active_provider(), 'deepseek')
+    def test_unknown_provider_falls_back_to_the_default(self):
+        self.assertEqual(llm.active_provider(), llm.DEFAULT_PROVIDER)
+
+    @override_settings(LLM_PROVIDER='')
+    def test_empty_provider_falls_back_to_the_default(self):
+        self.assertEqual(llm.active_provider(), llm.DEFAULT_PROVIDER)
 
     @override_settings(LLM_PROVIDER='sarvam', DEMO_MODE=False)
     def test_configured_provider_is_the_one_called(self):

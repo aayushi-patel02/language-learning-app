@@ -212,7 +212,7 @@ CSRF_TRUSTED_ORIGINS = env_list(
 
 # LLM tutor configuration (see tutor/llm.py)
 
-LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'deepseek')
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'gemini')
 
 # DEMO_MODE serves pre-cached tutor turns instead of hitting the LLM. Keep this
 # available for Demo Day: it makes the chip-based path fully deterministic.
