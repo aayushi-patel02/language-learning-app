@@ -69,8 +69,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    # Serves collected static files (incl. the admin's CSS) in production on Render.
-    'whitenoise.middleware.WhiteNoiseMiddleware',
     # CorsMiddleware must sit above CommonMiddleware so CORS headers survive redirects.
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -80,6 +78,12 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if not DEBUG:
+    # Serves collected static files (including the admin's CSS) on Render.
+    # Left out in DEBUG because runserver handles static files itself, and
+    # WhiteNoise warns about the not-yet-collected staticfiles/ directory.
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 
 ROOT_URLCONF = 'config.urls'
 
