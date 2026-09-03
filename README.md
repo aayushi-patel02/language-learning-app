@@ -160,9 +160,11 @@ priority order.
 
 ## Project status
 
-Working: data model, SM-2 scheduler and its tests, vocab seed, Django admin.
+Working: data model, SM-2 scheduler, LLM adapter with fallbacks, all three API
+endpoints, vocab seed, Django admin. 144 tests, none of which touch the
+network.
 
-In progress: LLM adapter, session API, React frontend, deployment.
+In progress: React frontend, deployment.
 
 ## Layout
 
