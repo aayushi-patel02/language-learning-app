@@ -1,7 +1,21 @@
+# Python / Django
 backend/venv/
-backend/.env
-backend/__pycache__/
+__pycache__/
+*.py[cod]
 backend/db.sqlite3
+backend/staticfiles/
+
+# Secrets — .env.example is the committed template
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/.vite/
+
+# Editor / OS
 .DS_Store
+.vscode/
+.idea/
