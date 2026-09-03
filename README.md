@@ -53,13 +53,33 @@ correct option was visible. Typed answers are graded from the model's verdict.
 | --- | --- |
 | Backend | Django + Django REST Framework, SQLite |
 | Frontend | React (Vite) + Tailwind CSS + react-router-dom |
-| LLM | DeepSeek or Sarvam AI, selected by one env var |
+| LLM | Gemini, DeepSeek or Sarvam AI, selected by one env var |
 
-The LLM sits behind an adapter in `tutor/llm.py` with a single `_call()` entry
-point, so switching providers is a one-line config change rather than a
-refactor. Every model call has a hand-written fallback response, and
-`DEMO_MODE=true` serves pre-cached turns instead of calling out at all — a live
-demo shouldn't depend on someone else's rate limit.
+The LLM sits behind an adapter in [`tutor/llm.py`](backend/tutor/llm.py) with a
+single `_call()` entry point, so switching providers is a one-line config
+change rather than a refactor. That paid off immediately: the build started on
+DeepSeek, and moving to Gemini when its balance ran out took one function and
+one dictionary entry.
+
+Responses are hardened before use — markdown fences stripped, prose wrappers
+tolerated, then normalised into a guaranteed shape. Every call has a
+hand-written fallback turn, and `DEMO_MODE=true` skips the network entirely and
+replays a fixed script, because a live demo shouldn't depend on someone else's
+rate limit.
+
+One rule the API layer relies on: if grading a typed answer fails, the result
+comes back `graded=False` and **no** SM-2 update runs. A provider outage must
+never record a wrong answer the learner didn't give.
+
+To check the live path at any time:
+
+```bash
+cd backend && python manage.py check_llm
+```
+
+It prints the active provider, confirms the key is present without printing it,
+makes one real request, and exits non-zero if anything fell back. Add
+`--list-models` to see which models your key can actually reach.
 
 ### Data model
 
@@ -120,7 +140,9 @@ Copy `backend/.env.example` to `backend/.env`. The variables that matter:
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `LLM_PROVIDER` | `deepseek` | `deepseek` or `sarvam` |
+| `LLM_PROVIDER` | `gemini` | `gemini`, `deepseek` or `sarvam` |
+| `GEMINI_API_KEY` | — | required when the provider is Gemini |
+| `GEMINI_MODEL` | `gemini-2.0-flash` | see `check_llm --list-models` |
 | `DEEPSEEK_API_KEY` | — | required when the provider is DeepSeek |
 | `SARVAM_API_KEY` | — | required when the provider is Sarvam |
 | `DEMO_MODE` | `false` | serve cached turns, skip the model entirely |
