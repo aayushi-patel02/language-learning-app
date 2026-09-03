@@ -117,6 +117,10 @@ class ConversationSession(models.Model):
     # The vocab this session was built to practise, chosen by the SM-2 scheduler
     # when the session starts.
     target_items = models.ManyToManyField(VocabItem, related_name='sessions', blank=True)
+    # The same items as an ordered list of ids. A ManyToMany has no inherent
+    # order, but turn N must drill the scheduler's Nth choice - overdue items
+    # before new ones - so the order is stored explicitly.
+    planned_item_ids = models.JSONField(default=list, blank=True)
 
     turn_limit = models.PositiveSmallIntegerField(default=default_turn_limit)
     is_complete = models.BooleanField(default=False)
@@ -132,7 +136,16 @@ class ConversationSession(models.Model):
 
     @property
     def answered_turn_count(self):
-        return self.turns.filter(was_correct__isnull=False).count()
+        # Keyed on answered_at, not was_correct: a turn the provider failed to
+        # grade still consumed the learner's answer and must not be re-served.
+        return self.turns.filter(answered_at__isnull=False).count()
+
+    def target_for_index(self, index):
+        """The vocab item turn `index` should drill, or None past the plan."""
+        ids = self.planned_item_ids or []
+        if not 0 <= index < len(ids):
+            return None
+        return VocabItem.objects.filter(pk=ids[index]).first()
 
     @property
     def is_finished(self):
@@ -204,4 +217,9 @@ class Turn(models.Model):
 
     @property
     def is_answered(self):
-        return self.was_correct is not None
+        # was_correct stays null when grading failed, so it can't mean this.
+        return self.answered_at is not None
+
+    @property
+    def is_graded(self):
+        return self.sm2_quality is not None
