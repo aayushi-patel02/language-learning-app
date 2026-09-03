@@ -113,6 +113,9 @@ Return ONLY a JSON object. No prose, no markdown fences.
 # --- providers -------------------------------------------------------------
 
 def _call_deepseek(system_prompt, user_content):
+    # DeepSeek's API is OpenAI-compatible, so the official openai SDK talks to
+    # it by pointing base_url at api.deepseek.com. That's why `openai` is a
+    # dependency here despite no OpenAI model being used.
     from openai import OpenAI
 
     api_key = os.getenv('DEEPSEEK_API_KEY')
