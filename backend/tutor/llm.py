@@ -37,7 +37,9 @@ MAX_TOKENS = 700
 # Gemini is the default because it's the provider with a usable free tier.
 # DeepSeek and Sarvam stay registered so switching back is one env var.
 DEFAULT_PROVIDER = 'gemini'
-DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash'
+# Model names churn fast and availability is per-project, so this is only a
+# starting guess. `manage.py check_llm --list-models` is the authority.
+DEFAULT_GEMINI_MODEL = 'gemini-flash-latest'
 # Low but not zero: identical phrasing every session feels canned, wild
 # variation makes the distractors unreliable.
 TEMPERATURE = 0.4
@@ -176,7 +178,22 @@ def _call_gemini(system_prompt, user_content):
         },
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    response.raise_for_status()
+    if response.status_code != 200:
+        # raise_for_status() throws away the body, and Google puts the useful
+        # part there: SERVICE_DISABLED vs PERMISSION_DENIED vs
+        # RESOURCE_EXHAUSTED are three very different problems.
+        try:
+            error = response.json().get('error', {})
+            detail = error.get('message', response.text[:200])
+            reason = error.get('status', '')
+        except ValueError:
+            detail, reason = response.text[:200], ''
+        raise LLMError(
+            f'Gemini {response.status_code}'
+            + (f' {reason}' if reason else '')
+            + f': {detail}'
+        )
+
     payload = response.json()
 
     candidates = payload.get('candidates') or []
@@ -559,10 +576,23 @@ FALLBACK_FEEDBACK_EN = (
 )
 
 
+def _bank_for(topic):
+    return FALLBACK_TURNS.get(topic) or FALLBACK_TURNS[DAILY_ROUTINE]
+
+
 def fallback_turn(topic, turn_index=0):
     """A known-good turn for `topic`, chosen by index so demos are repeatable."""
-    bank = FALLBACK_TURNS.get(topic) or FALLBACK_TURNS[DAILY_ROUTINE]
+    bank = _bank_for(topic)
     return copy.deepcopy(bank[turn_index % len(bank)])
+
+
+def demo_bank_size(topic):
+    """How many distinct canned turns exist for a topic.
+
+    The index wraps past the end of the bank, so a demo session longer than
+    this repeats itself. Callers cap the session length with it.
+    """
+    return len(_bank_for(topic))
 
 
 # --- public API ------------------------------------------------------------

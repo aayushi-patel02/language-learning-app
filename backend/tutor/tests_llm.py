@@ -365,10 +365,11 @@ class EvaluateFreetextTests(TestCase):
 class GeminiTransportTests(TestCase):
     """Gemini's envelope and failure modes differ from the OpenAI-shaped ones."""
 
-    def _run(self, json_body):
+    def _run(self, json_body, status=200):
         response = mock.Mock()
+        response.status_code = status
         response.json.return_value = json_body
-        response.raise_for_status.return_value = None
+        response.text = str(json_body)
         with mock.patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key'}):
             with mock.patch('requests.post', return_value=response) as posted:
                 return llm._call_gemini('system', 'user'), posted
@@ -438,6 +439,36 @@ class GeminiTransportTests(TestCase):
                                 'finishReason': 'STOP'}]
             })
         self.assertIn('gemini-3-turbo:generateContent', posted.call_args.args[0])
+
+    def test_http_error_surfaces_googles_own_message(self):
+        # raise_for_status() would hide this, and the body is where the
+        # difference between "API not enabled" and "project denied" lives.
+        body = {'error': {'code': 403, 'status': 'PERMISSION_DENIED',
+                          'message': 'Your project has been denied access.'}}
+        with self.assertRaises(llm.LLMError) as caught:
+            self._run(body, status=403)
+        message = str(caught.exception)
+        self.assertIn('403', message)
+        self.assertIn('PERMISSION_DENIED', message)
+        self.assertIn('denied access', message)
+
+    def test_http_error_with_a_non_json_body_still_raises_cleanly(self):
+        response = mock.Mock()
+        response.status_code = 500
+        response.json.side_effect = ValueError('not json')
+        response.text = '<html>Internal Server Error</html>'
+        with mock.patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key'}):
+            with mock.patch('requests.post', return_value=response):
+                with self.assertRaises(llm.LLMError) as caught:
+                    llm._call_gemini('system', 'user')
+        self.assertIn('500', str(caught.exception))
+
+    def test_service_disabled_is_distinguishable_from_permission_denied(self):
+        body = {'error': {'code': 403, 'status': 'SERVICE_DISABLED',
+                          'message': 'Generative Language API has not been used.'}}
+        with self.assertRaises(llm.LLMError) as caught:
+            self._run(body, status=403)
+        self.assertIn('SERVICE_DISABLED', str(caught.exception))
 
     @override_settings(DEMO_MODE=False, LLM_PROVIDER='gemini')
     def test_gemini_failure_still_falls_back_to_a_usable_turn(self):
