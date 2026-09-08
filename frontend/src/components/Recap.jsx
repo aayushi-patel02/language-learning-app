@@ -1,0 +1,144 @@
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+
+import { getRecap } from '../api'
+
+function formatDue(dueDate) {
+  if (!dueDate) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const due = new Date(`${dueDate}T00:00:00`)
+  const days = Math.round((due - today) / 86400000)
+
+  if (days <= 0) return 'today'
+  if (days === 1) return 'tomorrow'
+  if (days < 7) return `in ${days} days`
+  if (days < 30) return `in ${Math.round(days / 7)} weeks`
+  return `in ${Math.round(days / 30)} months`
+}
+
+export default function Recap() {
+  const { sessionId } = useParams()
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    getRecap(sessionId)
+      .then((response) => setData(response.data))
+      .catch((err) =>
+        setError(err?.response?.data?.detail ?? 'Could not load this recap.'),
+      )
+  }, [sessionId])
+
+  if (error) {
+    return (
+      <Shell>
+        <p className="rounded-lg bg-wrong-soft px-3 py-2 text-sm text-wrong">{error}</p>
+      </Shell>
+    )
+  }
+
+  if (!data) {
+    return (
+      <Shell>
+        <p className="py-16 text-center text-sm text-muted">Loading…</p>
+      </Shell>
+    )
+  }
+
+  const accuracy =
+    data.accuracy === null ? '—' : `${Math.round(data.accuracy * 100)}%`
+
+  return (
+    <Shell>
+      <h1 className="text-xl font-semibold tracking-tight">Session recap</h1>
+      <p className="mt-1 text-sm text-muted">{data.topic_label}</p>
+
+      <div className="mt-6 grid grid-cols-3 gap-3">
+        <Stat label="Words" value={data.words_practiced} />
+        <Stat label="Correct" value={`${data.turns_correct}/${data.turns_graded}`} />
+        <Stat label="Accuracy" value={accuracy} />
+      </div>
+
+      <h2 className="mt-8 text-xs font-medium tracking-wide text-muted uppercase">
+        Next review
+      </h2>
+
+      {data.words.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">
+          No words were practised in this session.
+        </p>
+      ) : (
+        <ul className="mt-3 divide-y divide-line">
+          {data.words.map((word) => (
+            <li key={word.spanish} className="flex items-center gap-3 py-2.5">
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  !word.graded
+                    ? 'bg-muted'
+                    : word.was_correct
+                      ? 'bg-right'
+                      : 'bg-wrong'
+                }`}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">{word.spanish}</span>
+                <span className="block truncate text-xs text-muted">
+                  {word.english}
+                </span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="block text-xs">
+                  {word.graded ? formatDue(word.due_date) : 'not graded'}
+                </span>
+                {word.graded && word.interval_days != null && (
+                  <span className="block text-[11px] text-muted">
+                    {word.interval_days}d interval
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mt-6 text-xs leading-relaxed text-muted">
+        Review dates come from SM-2. A word you got wrong resets to a one-day
+        interval; each correct answer pushes it further out.
+      </p>
+
+      <div className="mt-8 flex gap-3">
+        <Link
+          to="/"
+          className="flex-1 rounded-xl bg-ink px-4 py-3 text-center text-sm font-medium
+                     text-white transition hover:opacity-90"
+        >
+          Back to topics
+        </Link>
+        <Link
+          to={`/chat/${data.topic}`}
+          className="flex-1 rounded-xl border border-line px-4 py-3 text-center text-sm
+                     font-medium transition hover:bg-surface"
+        >
+          Practise again
+        </Link>
+      </div>
+    </Shell>
+  )
+}
+
+function Shell({ children }) {
+  return (
+    <div className="mx-auto min-h-full max-w-md px-5 py-8">{children}</div>
+  )
+}
+
+function Stat({ label, value }) {
+  return (
+    <div className="rounded-xl bg-surface px-3 py-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold">{value}</p>
+    </div>
+  )
+}
