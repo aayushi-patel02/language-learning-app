@@ -36,10 +36,12 @@ MAX_TOKENS = 700
 
 # Gemini is the default because it's the provider with a usable free tier.
 # DeepSeek and Sarvam stay registered so switching back is one env var.
-DEFAULT_PROVIDER = 'gemini'
-# Model names churn fast and availability is per-project, so this is only a
-# starting guess. `manage.py check_llm --list-models` is the authority.
+DEFAULT_PROVIDER = 'groq'
+# Model names churn fast and availability varies per account, so these are only
+# starting guesses. `manage.py check_llm --list-models` is the authority.
 DEFAULT_GEMINI_MODEL = 'gemini-flash-latest'
+DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat'
+DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile'
 # Low but not zero: identical phrasing every session feels canned, wild
 # variation makes the distractors unreliable.
 TEMPERATURE = 0.4
@@ -119,34 +121,58 @@ Return ONLY a JSON object. No prose, no markdown fences.
 
 # --- providers -------------------------------------------------------------
 
-def _call_deepseek(system_prompt, user_content):
-    # DeepSeek's API is OpenAI-compatible, so the official openai SDK talks to
-    # it by pointing base_url at api.deepseek.com. That's why `openai` is a
-    # dependency here despite no OpenAI model being used.
+def _call_openai_compatible(base_url, key_var, model, system_prompt, user_content):
+    """Talk to any provider that speaks the OpenAI chat-completions protocol.
+
+    Both DeepSeek and Groq do, so the official `openai` SDK reaches them by
+    pointing base_url elsewhere. That is why `openai` is a dependency here
+    despite no OpenAI model being used.
+    """
     from openai import OpenAI
 
-    api_key = os.getenv('DEEPSEEK_API_KEY')
+    api_key = os.getenv(key_var)
     if not api_key:
-        raise LLMError('DEEPSEEK_API_KEY is not set')
+        raise LLMError(f'{key_var} is not set')
 
     client = OpenAI(
-        api_key=api_key,
-        base_url='https://api.deepseek.com',
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    )
+        api_key=api_key, base_url=base_url, timeout=REQUEST_TIMEOUT_SECONDS)
     response = client.chat.completions.create(
-        model=os.getenv('DEEPSEEK_MODEL', 'deepseek-chat'),
+        model=model,
         messages=[
             {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': user_content},
         ],
         max_tokens=MAX_TOKENS,
         temperature=TEMPERATURE,
-        # DeepSeek honours OpenAI's JSON mode, which removes most parse
-        # failures at the source. _extract_json still guards the rest.
+        # JSON mode removes most parse failures at the source. _extract_json
+        # still guards whatever slips through.
         response_format={'type': 'json_object'},
     )
     return response.choices[0].message.content or ''
+
+
+DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
+GROQ_BASE_URL = 'https://api.groq.com/openai/v1'
+
+
+def _call_deepseek(system_prompt, user_content):
+    return _call_openai_compatible(
+        DEEPSEEK_BASE_URL,
+        'DEEPSEEK_API_KEY',
+        os.getenv('DEEPSEEK_MODEL', DEFAULT_DEEPSEEK_MODEL),
+        system_prompt,
+        user_content,
+    )
+
+
+def _call_groq(system_prompt, user_content):
+    return _call_openai_compatible(
+        GROQ_BASE_URL,
+        'GROQ_API_KEY',
+        os.getenv('GROQ_MODEL', DEFAULT_GROQ_MODEL),
+        system_prompt,
+        user_content,
+    )
 
 
 GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
@@ -249,6 +275,7 @@ def _call_sarvam(system_prompt, user_content):
 
 
 PROVIDERS = {
+    'groq': _call_groq,
     'gemini': _call_gemini,
     'deepseek': _call_deepseek,
     'sarvam': _call_sarvam,

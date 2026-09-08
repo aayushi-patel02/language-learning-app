@@ -478,7 +478,72 @@ class GeminiTransportTests(TestCase):
         self.assertTrue(turn['tutor_message_es'])
 
 
+class OpenAiCompatibleTransportTests(TestCase):
+    """DeepSeek and Groq share one code path; check it routes correctly."""
+
+    def _client(self, content='{"ok": true}'):
+        message = mock.Mock()
+        message.content = content
+        choice = mock.Mock()
+        choice.message = message
+        completion = mock.Mock()
+        completion.choices = [choice]
+
+        client = mock.Mock()
+        client.chat.completions.create.return_value = completion
+        factory = mock.Mock(return_value=client)
+        return factory, client
+
+    def test_groq_uses_its_own_base_url_key_and_model(self):
+        factory, client = self._client()
+        env = {'GROQ_API_KEY': 'groq-key', 'GROQ_MODEL': 'llama-test'}
+        with mock.patch.dict(os.environ, env):
+            with mock.patch('openai.OpenAI', factory):
+                text = llm._call_groq('system', 'user')
+
+        self.assertEqual(text, '{"ok": true}')
+        self.assertEqual(factory.call_args.kwargs['base_url'], llm.GROQ_BASE_URL)
+        self.assertEqual(factory.call_args.kwargs['api_key'], 'groq-key')
+        self.assertEqual(
+            client.chat.completions.create.call_args.kwargs['model'], 'llama-test')
+
+    def test_deepseek_uses_its_own_base_url(self):
+        factory, _ = self._client()
+        with mock.patch.dict(os.environ, {'DEEPSEEK_API_KEY': 'ds-key'}):
+            with mock.patch('openai.OpenAI', factory):
+                llm._call_deepseek('system', 'user')
+        self.assertEqual(factory.call_args.kwargs['base_url'], llm.DEEPSEEK_BASE_URL)
+
+    def test_json_mode_is_requested(self):
+        factory, client = self._client()
+        with mock.patch.dict(os.environ, {'GROQ_API_KEY': 'k'}):
+            with mock.patch('openai.OpenAI', factory):
+                llm._call_groq('system', 'user')
+        sent = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(sent['response_format'], {'type': 'json_object'})
+        self.assertEqual(sent['messages'][0]['role'], 'system')
+
+    def test_missing_key_raises_before_constructing_a_client(self):
+        factory, _ = self._client()
+        with mock.patch.dict(os.environ, {'GROQ_API_KEY': ''}):
+            with mock.patch('openai.OpenAI', factory):
+                with self.assertRaises(llm.LLMError) as caught:
+                    llm._call_groq('system', 'user')
+        self.assertIn('GROQ_API_KEY', str(caught.exception))
+        factory.assert_not_called()
+
+    def test_empty_content_returns_empty_string_for_the_parser_to_reject(self):
+        factory, _ = self._client(content=None)
+        with mock.patch.dict(os.environ, {'GROQ_API_KEY': 'k'}):
+            with mock.patch('openai.OpenAI', factory):
+                self.assertEqual(llm._call_groq('system', 'user'), '')
+
+
 class ProviderSelectionTests(TestCase):
+    @override_settings(LLM_PROVIDER='groq')
+    def test_groq_selected(self):
+        self.assertEqual(llm.active_provider(), 'groq')
+
     @override_settings(LLM_PROVIDER='gemini')
     def test_gemini_selected(self):
         self.assertEqual(llm.active_provider(), 'gemini')

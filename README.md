@@ -53,13 +53,14 @@ correct option was visible. Typed answers are graded from the model's verdict.
 | --- | --- |
 | Backend | Django + Django REST Framework, SQLite |
 | Frontend | React (Vite) + Tailwind CSS + react-router-dom |
-| LLM | Gemini, DeepSeek or Sarvam AI, selected by one env var |
+| LLM | Groq, Gemini, DeepSeek or Sarvam, selected by one env var |
 
 The LLM sits behind an adapter in [`tutor/llm.py`](backend/tutor/llm.py) with a
 single `_call()` entry point, so switching providers is a one-line config
-change rather than a refactor. That paid off immediately: the build started on
-DeepSeek, and moving to Gemini when its balance ran out took one function and
-one dictionary entry.
+change rather than a refactor. That paid off repeatedly: the build started on
+DeepSeek, and each move after it — to Gemini, then to Groq — cost one function
+and one dictionary entry. DeepSeek and Groq share a single OpenAI-protocol code
+path; Gemini and Sarvam have their own.
 
 Responses are hardened before use — markdown fences stripped, prose wrappers
 tolerated, then normalised into a guaranteed shape. Every call has a
@@ -140,9 +141,10 @@ Copy `backend/.env.example` to `backend/.env`. The variables that matter:
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `LLM_PROVIDER` | `gemini` | `gemini`, `deepseek` or `sarvam` |
+| `LLM_PROVIDER` | `groq` | `groq`, `gemini`, `deepseek` or `sarvam` |
+| `GROQ_API_KEY` | — | required when the provider is Groq |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | model access varies by account; `check_llm --list-models` is authoritative |
 | `GEMINI_API_KEY` | — | required when the provider is Gemini |
-| `GEMINI_MODEL` | `gemini-flash-latest` | model access is per-project; `check_llm --list-models` is authoritative |
 | `DEEPSEEK_API_KEY` | — | required when the provider is DeepSeek |
 | `SARVAM_API_KEY` | — | required when the provider is Sarvam |
 | `DEMO_MODE` | `false` | serve cached turns, skip the model entirely |

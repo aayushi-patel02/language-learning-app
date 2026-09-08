@@ -19,9 +19,16 @@ from tutor.models import TOPIC_SLUGS, VocabItem
 
 # Which env var holds the key and model for each provider.
 PROVIDER_ENV = {
+    'groq': ('GROQ_API_KEY', 'GROQ_MODEL', llm.DEFAULT_GROQ_MODEL),
     'gemini': ('GEMINI_API_KEY', 'GEMINI_MODEL', llm.DEFAULT_GEMINI_MODEL),
-    'deepseek': ('DEEPSEEK_API_KEY', 'DEEPSEEK_MODEL', 'deepseek-chat'),
+    'deepseek': ('DEEPSEEK_API_KEY', 'DEEPSEEK_MODEL', llm.DEFAULT_DEEPSEEK_MODEL),
     'sarvam': ('SARVAM_API_KEY', 'SARVAM_MODEL', 'sarvam-105b-conversations'),
+}
+
+# Providers that expose OpenAI's GET /models listing endpoint.
+OPENAI_COMPATIBLE_BASE_URLS = {
+    'groq': llm.GROQ_BASE_URL,
+    'deepseek': llm.DEEPSEEK_BASE_URL,
 }
 
 
@@ -65,14 +72,8 @@ class Command(BaseCommand):
             ))
             return self.fail()
 
-        if options['list_models']:
-            self.stdout.write('')
-            if provider != 'gemini':
-                self.stdout.write(self.style.WARNING(
-                    f'--list-models is only implemented for Gemini, not {provider}.'
-                ))
-            elif not self.list_gemini_models():
-                return self.fail()
+        if options['list_models'] and not self.list_models(provider):
+            return self.fail()
 
         if settings.DEMO_MODE:
             self.stdout.write('')
@@ -83,43 +84,74 @@ class Command(BaseCommand):
 
         return self.try_one_turn(options['topic'])
 
-    def list_gemini_models(self):
-        import requests
+    def list_models(self, provider):
+        """Print the models this key can reach, and flag a bad model name.
 
+        Worth running before anything else: model names churn, and access is
+        per-account, so a plausible-looking name in .env is often simply not
+        one this key is allowed to use.
+        """
+        self.stdout.write('')
         self.stdout.write(self.style.MIGRATE_HEADING('Models this key can reach'))
+
         try:
-            response = requests.get(
-                f'{llm.GEMINI_BASE_URL}/models',
-                headers={'x-goog-api-key': os.getenv('GEMINI_API_KEY')},
-                timeout=llm.REQUEST_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
+            if provider == 'gemini':
+                names = self._gemini_model_names()
+            elif provider in OPENAI_COMPATIBLE_BASE_URLS:
+                names = self._openai_compatible_model_names(provider)
+            else:
+                self.stdout.write(self.style.WARNING(
+                    f'  listing is not implemented for {provider}.'))
+                return True
         except Exception as exc:
             self.stdout.write(self.style.ERROR(f'  could not list models: {exc}'))
             return False
 
-        names = [
-            entry['name'].removeprefix('models/')
-            for entry in response.json().get('models', [])
-            if 'generateContent' in entry.get('supportedGenerationMethods', [])
-        ]
         if not names:
-            self.stdout.write(self.style.ERROR('  none support generateContent'))
+            self.stdout.write(self.style.ERROR('  the key can reach no models'))
             return False
 
-        configured = os.getenv('GEMINI_MODEL', llm.DEFAULT_GEMINI_MODEL)
-        for name in sorted(names):
-            marker = '  <- GEMINI_MODEL' if name == configured else ''
+        key_var, model_var, model_default = PROVIDER_ENV[provider]
+        configured = os.getenv(model_var, model_default)
+        for name in names:
+            marker = f'  <- {model_var}' if name == configured else ''
             self.stdout.write(f'  {name}{self.style.SUCCESS(marker)}')
 
         if configured not in names:
             self.stdout.write('')
             self.stdout.write(self.style.ERROR(
-                f'GEMINI_MODEL={configured} is not in that list. Set it to one '
+                f'{model_var}={configured} is not in that list. Set it to one '
                 f'of the names above in backend/.env.'
             ))
             return False
         return True
+
+    def _gemini_model_names(self):
+        import requests
+
+        response = requests.get(
+            f'{llm.GEMINI_BASE_URL}/models',
+            headers={'x-goog-api-key': os.getenv('GEMINI_API_KEY')},
+            timeout=llm.REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return sorted(
+            entry['name'].removeprefix('models/')
+            for entry in response.json().get('models', [])
+            if 'generateContent' in entry.get('supportedGenerationMethods', [])
+        )
+
+    def _openai_compatible_model_names(self, provider):
+        import requests
+
+        key_var = PROVIDER_ENV[provider][0]
+        response = requests.get(
+            f'{OPENAI_COMPATIBLE_BASE_URLS[provider]}/models',
+            headers={'Authorization': f'Bearer {os.getenv(key_var)}'},
+            timeout=llm.REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return sorted(entry['id'] for entry in response.json().get('data', []))
 
     def try_one_turn(self, topic):
         self.stdout.write('')
