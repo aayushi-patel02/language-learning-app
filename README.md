@@ -142,7 +142,7 @@ Copy `backend/.env.example` to `backend/.env`. The variables that matter:
 | --- | --- | --- |
 | `LLM_PROVIDER` | `gemini` | `gemini`, `deepseek` or `sarvam` |
 | `GEMINI_API_KEY` | — | required when the provider is Gemini |
-| `GEMINI_MODEL` | `gemini-2.0-flash` | see `check_llm --list-models` |
+| `GEMINI_MODEL` | `gemini-flash-latest` | model access is per-project; `check_llm --list-models` is authoritative |
 | `DEEPSEEK_API_KEY` | — | required when the provider is DeepSeek |
 | `SARVAM_API_KEY` | — | required when the provider is Sarvam |
 | `DEMO_MODE` | `false` | serve cached turns, skip the model entirely |
@@ -160,11 +160,17 @@ priority order.
 
 ## Project status
 
-Working: data model, SM-2 scheduler, LLM adapter with fallbacks, all three API
-endpoints, vocab seed, Django admin. 144 tests, none of which touch the
-network.
+Working end to end: data model, SM-2 scheduler, LLM adapter with fallbacks, all
+three API endpoints, vocab seed, Django admin, and the React frontend. 150
+tests, none of which touch the network.
 
-In progress: React frontend, deployment.
+In progress: deployment.
+
+Currently running on `DEMO_MODE=true`. The three providers wired up all refuse
+new free-tier projects at the moment, so the app serves its hand-written turn
+bank. Chip practice, SM-2 scheduling and the recap are fully real either way;
+what demo mode costs is free-text evaluation and conversational variety. Any
+provider with credit switches it back on through `LLM_PROVIDER`.
 
 ## Layout
 
