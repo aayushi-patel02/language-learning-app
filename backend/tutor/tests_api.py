@@ -221,6 +221,45 @@ class TargetResolutionTests(ApiTestCase):
         self.assertEqual(reviewed.item, shown, 'must credit the word on screen')
 
 
+class DemoModeSessionLengthTests(ApiTestCase):
+    """A demo session must not visibly replay the same canned turns."""
+
+    @override_settings(DEMO_MODE=True, SESSION_TURN_LIMIT=8)
+    def test_demo_session_is_capped_to_the_bank_size(self):
+        bank_size = llm.demo_bank_size(TOPIC)
+        self.assertLess(bank_size, 8, 'precondition: bank is shorter than the limit')
+
+        response = self.client.post(
+            reverse('session-start'), {'topic': TOPIC},
+            content_type='application/json')
+        self.assertEqual(response.json()['turn_limit'], bank_size)
+
+    @override_settings(DEMO_MODE=True, SESSION_TURN_LIMIT=8)
+    def test_demo_session_never_repeats_a_tutor_line(self):
+        session_id = self.client.post(
+            reverse('session-start'), {'topic': TOPIC},
+            content_type='application/json').json()['session_id']
+
+        for _ in range(llm.demo_bank_size(TOPIC)):
+            self.client.post(
+                reverse('session-next', args=[session_id]),
+                {'mode': 'chip', 'reply_id': 0},
+                content_type='application/json')
+
+        lines = list(
+            Turn.objects.filter(session_id=session_id)
+            .values_list('tutor_message_es', flat=True))
+        self.assertEqual(len(lines), len(set(lines)), 'every turn should be distinct')
+
+    @override_settings(DEMO_MODE=False, SESSION_TURN_LIMIT=8)
+    def test_live_sessions_are_not_capped(self):
+        with stub_turn('one'):
+            response = self.client.post(
+                reverse('session-start'), {'topic': TOPIC},
+                content_type='application/json')
+        self.assertEqual(response.json()['turn_limit'], 8)
+
+
 class ChipGradingTests(ApiTestCase):
     def test_correct_chip_is_graded_four_and_advances_sm2(self):
         session_id = self.start().json()['session_id']

@@ -105,8 +105,13 @@ class StartSessionView(APIView):
             )
 
         user = get_demo_user()
-        items = sm2.select_session_items(
-            user, topic, limit=settings.SESSION_TURN_LIMIT)
+        turn_limit = settings.SESSION_TURN_LIMIT
+        if settings.DEMO_MODE:
+            # The canned bank wraps, so a longer session would replay the same
+            # questions. Better a short demo than a visibly repeating one.
+            turn_limit = min(turn_limit, llm.demo_bank_size(topic))
+
+        items = sm2.select_session_items(user, topic, limit=turn_limit)
         if not items:
             return Response(
                 {'detail': f'No vocabulary seeded for {topic!r}. '
@@ -123,6 +128,7 @@ class StartSessionView(APIView):
             session = ConversationSession.objects.create(
                 user=user,
                 topic=topic,
+                turn_limit=turn_limit,
                 planned_item_ids=[item.pk for item in items],
             )
             session.target_items.set(items)
