@@ -32,7 +32,11 @@ from .models import DAILY_ROUTINE, ORDERING_FOOD, TRAVEL_BASICS
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 20
-MAX_TOKENS = 700
+# A turn's JSON is only ~250 tokens, but reasoning models spend a large hidden
+# budget before emitting anything. Too low a cap truncates them mid-document
+# and the whole response is wasted, so this is deliberately generous - it is a
+# ceiling, not a target, and non-reasoning models stay well under it.
+MAX_TOKENS = 2500
 
 # Gemini is the default because it's the provider with a usable free tier.
 # DeepSeek and Sarvam stay registered so switching back is one env var.
