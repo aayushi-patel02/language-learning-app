@@ -1,0 +1,48 @@
+# Render blueprint. Import this repo at dashboard.render.com/blueprints and
+# Render reads this instead of you filling in the web form.
+#
+# Secrets are marked `sync: false`, which means Render prompts for them at
+# deploy time and never stores them in the repo.
+services:
+  - type: web
+    name: charla-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn config.wsgi:application"
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.14"
+
+      # Generated once by Render and kept out of the repo.
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "false"
+
+      # Set this to your Vercel URL after the frontend deploys, e.g.
+      # https://charla.vercel.app - no trailing slash.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+
+      # DEMO_MODE=true is the Demo Day safety net: no outbound API call, so a
+      # provider outage or rate limit cannot break the live demo. Flip to
+      # false to show the model working.
+      - key: DEMO_MODE
+        value: "true"
+
+      - key: LLM_PROVIDER
+        value: "groq"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: "openai/gpt-oss-120b"
+
+      - key: SESSION_TURN_LIMIT
+        value: "8"
+      - key: DEMO_USERNAME
+        value: "demo"

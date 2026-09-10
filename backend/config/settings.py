@@ -115,6 +115,20 @@ DATABASES = {
     }
 }
 
+# Render exposes a Postgres instance as DATABASE_URL. Without one the app
+# stays on SQLite, which still runs there - but Render's free disk is
+# ephemeral, so the file is wiped on every deploy and restart and the
+# learner's review history goes with it. Attaching a database makes the
+# schedule survive, which matters if a judge opens the app twice.
+if os.getenv('DATABASE_URL'):
+    import dj_database_url
+
+    DATABASES['default'] = dj_database_url.config(
+        conn_max_age=600,
+        conn_health_checks=True,
+        ssl_require=True,
+    )
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
@@ -166,14 +180,26 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# Email
-# https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# No MAILERS setting: this app sends no email, and the scaffold's console
+# backend is a hard error under `manage.py check --deploy`.
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+
+# Production hardening. Render terminates TLS at its proxy and forwards the
+# original scheme in X-Forwarded-Proto, so Django needs telling before it can
+# recognise a request as secure - without this, SECURE_SSL_REDIRECT would
+# redirect forever.
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    # Deliberately short, and without includeSubDomains: a long HSTS max-age
+    # on a shared host like onrender.com is effectively irreversible.
+    SECURE_HSTS_SECONDS = 3600
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
 
 
 # Django REST Framework

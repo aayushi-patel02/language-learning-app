@@ -174,6 +174,38 @@ bank. Chip practice, SM-2 scheduling and the recap are fully real either way;
 what demo mode costs is free-text evaluation and conversational variety. Any
 provider with credit switches it back on through `LLM_PROVIDER`.
 
+## Deployment
+
+Backend on Render, frontend on Vercel, from the same repo.
+
+**Backend.** At [dashboard.render.com/blueprints](https://dashboard.render.com/blueprints),
+import this repo — Render reads [`render.yaml`](render.yaml) instead of you
+filling in a web form. It prompts for the values marked `sync: false`
+(`GROQ_API_KEY`, and the two origin lists once the frontend URL exists) and
+generates `DJANGO_SECRET_KEY` itself. [`backend/build.sh`](backend/build.sh)
+installs, collects static files, migrates and seeds on every deploy.
+
+The blueprint ships with `DEMO_MODE=true`. That is intentional: a live demo
+should not depend on someone else's rate limit. Set it to `false` in the Render
+dashboard when you want to show the model working.
+
+Render's free disk is ephemeral, so on SQLite the review history is wiped on
+every restart. Attach a Postgres instance and set `DATABASE_URL` to make the
+schedule persist — `settings.py` picks it up automatically.
+
+**Frontend.** Import the same repo at Vercel with root directory `frontend`,
+and set `VITE_API_URL` to the Render URL plus `/api`.
+[`frontend/vercel.json`](frontend/vercel.json) rewrites all paths to
+`index.html`; without it, opening `/recap/5` directly returns a 404, because
+routing happens client-side.
+
+Then set `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` on Render to the
+Vercel URL, with no trailing slash.
+
+**Before relying on it:** hit the live URL several times, including after
+fifteen minutes of inactivity. Render's free tier sleeps, and the first request
+back can take close to a minute.
+
 ## Layout
 
 ```
