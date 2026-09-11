@@ -11,6 +11,8 @@ exist but not which is right, so a learner (or a judge poking at the network
 tab) cannot mark their own answer correct.
 """
 
+from datetime import date
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
@@ -137,6 +139,131 @@ class TopicListView(APIView):
             })
 
         return Response({'topics': payload})
+
+
+def _word_payload(item, state):
+    """One vocabulary row, shared by the library and the detail screen."""
+    return {
+        'id': item.pk,
+        'spanish': item.spanish,
+        'english': item.english,
+        'topic': item.topic,
+        'topic_label': item.get_topic_display(),
+        'part_of_speech': item.part_of_speech,
+        'example_es': item.example_es,
+        'example_en': item.example_en,
+        'shelf': state.shelf,
+        'is_saved': state.is_saved,
+        'due_date': state.due_date if state.total_reviews else None,
+        'repetitions': state.repetitions,
+        'total_reviews': state.total_reviews,
+        'correct_reviews': state.correct_reviews,
+        'lapses': state.lapses,
+        'accuracy': round(state.accuracy, 2) if state.accuracy is not None else None,
+        'last_reviewed_at': state.last_reviewed_at,
+    }
+
+
+class VocabularyListView(APIView):
+    """GET /api/vocabulary/ - the whole collection, grouped by mastery.
+
+    Shelves are mutually exclusive (see UserVocabState.shelf), so the counts
+    add up to the collection with nothing double-counted. `saved` and
+    `recent` are cross-cuts over the same words rather than shelves, which is
+    why they are returned as id lists instead of a fourth group.
+    """
+
+    def get(self, request):
+        user = get_demo_user()
+        states = sm2.ensure_states(user).select_related('item')
+
+        shelves = {'due': [], 'learning': [], 'mastered': [], 'new': []}
+        saved = []
+        for state in states:
+            payload = _word_payload(state.item, state)
+            shelves[payload['shelf']].append(payload)
+            if state.is_saved:
+                saved.append(payload)
+
+        # Ordering per shelf: the most useful thing first in each case.
+        shelves['due'].sort(key=lambda w: (w['due_date'] or date.max, w['spanish']))
+        shelves['learning'].sort(key=lambda w: (w['due_date'] or date.max, w['spanish']))
+        shelves['mastered'].sort(key=lambda w: -w['repetitions'])
+        shelves['new'].sort(key=lambda w: (w['topic'], w['spanish']))
+        saved.sort(key=lambda w: w['spanish'])
+
+        recent_ids = list(
+            Turn.objects.filter(
+                session__user=user,
+                answered_at__isnull=False,
+                target_item__isnull=False,
+            )
+            .order_by('-answered_at')
+            .values_list('target_item_id', flat=True)[:40]
+        )
+        # De-duplicate while keeping most-recent-first order.
+        seen, recent_order = set(), []
+        for item_id in recent_ids:
+            if item_id not in seen:
+                seen.add(item_id)
+                recent_order.append(item_id)
+
+        by_id = {
+            word['id']: word
+            for shelf in shelves.values()
+            for word in shelf
+        }
+        recent = [by_id[i] for i in recent_order[:12] if i in by_id]
+
+        return Response({
+            'counts': {name: len(words) for name, words in shelves.items()},
+            'total': sum(len(words) for words in shelves.values()),
+            'shelves': shelves,
+            'saved': saved,
+            'recent': recent,
+        })
+
+
+class WordDetailView(APIView):
+    """GET /api/vocabulary/<id>/ and POST to toggle the bookmark."""
+
+    def get_state(self, item_id):
+        user = get_demo_user()
+        item = get_object_or_404(VocabItem, pk=item_id)
+        state, _ = UserVocabState.objects.get_or_create(user=user, item=item)
+        return user, item, state
+
+    def get(self, request, item_id):
+        user, item, state = self.get_state(item_id)
+
+        # Where the learner has actually met this word, newest first, so the
+        # detail screen can show it in the context it was practised in.
+        appearances = [
+            {
+                'session_id': turn.session_id,
+                'tutor_message_es': turn.tutor_message_es,
+                'tutor_message_en': turn.tutor_message_en,
+                'user_reply': turn.user_reply,
+                'was_correct': turn.was_correct,
+                'feedback_en': turn.feedback_en,
+                'answered_at': turn.answered_at,
+            }
+            for turn in Turn.objects.filter(
+                session__user=user, target_item=item, answered_at__isnull=False
+            ).order_by('-answered_at')[:5]
+        ]
+
+        payload = _word_payload(item, state)
+        payload['appearances'] = appearances
+        payload['ease_factor'] = round(state.ease_factor, 2)
+        payload['interval_days'] = state.interval_days
+        return Response(payload)
+
+    def post(self, request, item_id):
+        _user, item, state = self.get_state(item_id)
+        state.is_saved = bool(request.data.get('is_saved', not state.is_saved))
+        state.save(update_fields=['is_saved'])
+        return Response({'id': item.pk, 'is_saved': state.is_saved})
 
 
 class ProgressView(APIView):

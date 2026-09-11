@@ -72,6 +72,11 @@ class UserVocabState(models.Model):
     # Next date this item should be reviewed on.
     due_date = models.DateField(default=timezone.localdate, db_index=True)
 
+    # Bookmarked by the learner from the vocabulary library. Independent of
+    # the schedule: saving a word says "I want to find this again", not
+    # anything about when it is next due.
+    is_saved = models.BooleanField(default=False)
+
     # --- bookkeeping, used by the recap dashboard ---
     last_reviewed_at = models.DateTimeField(null=True, blank=True)
     last_quality = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -106,6 +111,23 @@ class UserVocabState(models.Model):
         if not self.total_reviews:
             return None
         return self.correct_reviews / self.total_reviews
+
+    @property
+    def shelf(self):
+        """Which section of the vocabulary library this word belongs in.
+
+        A word is only ever in one of these, so the library adds up to the
+        whole collection with nothing double-counted.
+        """
+        from . import sm2
+
+        if self.total_reviews == 0:
+            return 'new'
+        if self.repetitions >= sm2.STRONG_REPETITIONS:
+            return 'mastered'
+        if self.due_date <= timezone.localdate():
+            return 'due'
+        return 'learning'
 
 
 class ConversationSession(models.Model):
