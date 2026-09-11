@@ -303,6 +303,40 @@ class DemoModeSessionLengthTests(ApiTestCase):
             content_type='application/json')
         self.assertEqual(response.json()['turn_limit'], 2)
 
+    @override_settings(DEMO_MODE=False, SESSION_TURN_LIMIT=8)
+    def test_turn_limit_never_exceeds_available_vocabulary(self):
+        # Otherwise the tail of the session drills nothing and grades nothing.
+        VocabItem.objects.filter(topic=TOPIC).exclude(
+            pk__in=VocabItem.objects.filter(topic=TOPIC).values_list('pk')[:3]
+        ).delete()
+        self.assertEqual(VocabItem.objects.filter(topic=TOPIC).count(), 3)
+
+        with stub_turn('one'):
+            body = self.client.post(
+                reverse('session-start'), {'topic': TOPIC},
+                content_type='application/json').json()
+        self.assertEqual(body['turn_limit'], 3)
+
+    @override_settings(DEMO_MODE=False, SESSION_TURN_LIMIT=8)
+    def test_every_turn_in_a_short_session_still_has_a_target(self):
+        VocabItem.objects.filter(topic=TOPIC).exclude(
+            pk__in=VocabItem.objects.filter(topic=TOPIC).values_list('pk')[:2]
+        ).delete()
+
+        with stub_turn('one'):
+            session_id = self.client.post(
+                reverse('session-start'), {'topic': TOPIC},
+                content_type='application/json').json()['session_id']
+            for _ in range(2):
+                self.client.post(
+                    reverse('session-next', args=[session_id]),
+                    {'mode': 'chip', 'reply_id': 1},
+                    content_type='application/json')
+
+        turns = Turn.objects.filter(session_id=session_id)
+        self.assertEqual(turns.count(), 2)
+        self.assertFalse(turns.filter(target_item__isnull=True).exists())
+
     def test_every_topic_has_a_full_length_bank(self):
         # Each topic must carry enough distinct turns for a default-length
         # session, or demo mode silently shortens it.

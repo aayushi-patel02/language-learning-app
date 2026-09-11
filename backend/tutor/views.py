@@ -158,6 +158,10 @@ class StartSessionView(APIView):
             turn_limit = min(turn_limit, llm.demo_bank_size(topic))
 
         items = sm2.select_session_items(user, topic, limit=turn_limit)
+        # Never plan more turns than there is vocabulary to drill. Otherwise
+        # the tail of the session has no target item, so those turns grade
+        # nothing and the recap silently under-reports.
+        turn_limit = min(turn_limit, len(items))
         if not items:
             return Response(
                 {'detail': f'No vocabulary seeded for {topic!r}. '
