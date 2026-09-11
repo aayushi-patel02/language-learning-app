@@ -1,7 +1,9 @@
 """Tutor LLM adapter.
 
 One `_call()` entry point sits in front of every provider, so switching between
-DeepSeek and Sarvam is the `LLM_PROVIDER` env var and nothing else.
+Groq, Gemini, DeepSeek and Sarvam is the `LLM_PROVIDER` env var and nothing
+else. Groq and DeepSeek share an OpenAI-protocol code path; the other two have
+their own.
 
 Three layers of defence, because a live demo cannot depend on someone else's
 uptime:
@@ -27,6 +29,7 @@ import re
 
 from django.conf import settings
 
+from .demo_turns import FALLBACK_TURNS
 from .models import DAILY_ROUTINE, ORDERING_FOOD, TRAVEL_BASICS
 
 logger = logging.getLogger(__name__)
@@ -38,8 +41,9 @@ REQUEST_TIMEOUT_SECONDS = 20
 # ceiling, not a target, and non-reasoning models stay well under it.
 MAX_TOKENS = 2500
 
-# Gemini is the default because it's the provider with a usable free tier.
-# DeepSeek and Sarvam stay registered so switching back is one env var.
+# Groq is the default: at the time of writing it is the one provider whose
+# free tier accepts new accounts. The others stay registered so switching is
+# one env var if that changes.
 DEFAULT_PROVIDER = 'groq'
 # Model names churn fast and availability varies per account, so these are only
 # starting guesses. `manage.py check_llm --list-models` is the authority.
@@ -486,134 +490,9 @@ def _topic_label(topic):
 
 
 # --- hand-written fallback bank -------------------------------------------
-# Correct Spanish, written and checked by hand. Serves DEMO_MODE and every
-# failure path, so the app is never dead in the water.
-
-FALLBACK_TURNS = {
-    DAILY_ROUTINE: [
-        {
-            'tutor_message_es': '¡Hola! ¿A qué hora te levantas normalmente?',
-            'tutor_message_en': 'Hi! What time do you usually get up?',
-            'target_word': 'levantarse',
-            'replies': [
-                {'id': 0, 'es': 'Yo levanto a las siete.', 'en': 'I get up at seven.',
-                 'is_correct': False, 'why_wrong': "'levantarse' is reflexive - it needs 'me'."},
-                {'id': 1, 'es': 'Me levanto a las siete.', 'en': 'I get up at seven.',
-                 'is_correct': True, 'why_wrong': ''},
-                {'id': 2, 'es': 'Me levanta a las siete.', 'en': 'I get up at seven.',
-                 'is_correct': False, 'why_wrong': "'levanta' is he/she - you need 'levanto' for I."},
-            ],
-        },
-        {
-            'tutor_message_es': '¿Y desayunas en casa o en el trabajo?',
-            'tutor_message_en': 'And do you have breakfast at home or at work?',
-            'target_word': 'desayunar',
-            'replies': [
-                {'id': 0, 'es': 'Desayuno en casa.', 'en': 'I have breakfast at home.',
-                 'is_correct': True, 'why_wrong': ''},
-                {'id': 1, 'es': 'Yo desayunar en casa.', 'en': 'I have breakfast at home.',
-                 'is_correct': False, 'why_wrong': "Conjugate the verb: 'desayuno', not 'desayunar'."},
-                {'id': 2, 'es': 'Desayunas en casa.', 'en': 'You have breakfast at home.',
-                 'is_correct': False, 'why_wrong': "'desayunas' means you - use 'desayuno' for I."},
-            ],
-        },
-        {
-            'tutor_message_es': 'Qué bien. ¿Y a qué hora te acuestas?',
-            'tutor_message_en': 'Nice. And what time do you go to bed?',
-            'target_word': 'acostarse',
-            'replies': [
-                {'id': 0, 'es': 'Me acosto a las once.', 'en': 'I go to bed at eleven.',
-                 'is_correct': False, 'why_wrong': "The stem changes: 'me acuesto', not 'me acosto'."},
-                {'id': 1, 'es': 'Me acuesto en las once.', 'en': 'I go to bed at eleven.',
-                 'is_correct': False, 'why_wrong': "Clock times take 'a las', not 'en las'."},
-                {'id': 2, 'es': 'Me acuesto a las once.', 'en': 'I go to bed at eleven.',
-                 'is_correct': True, 'why_wrong': ''},
-            ],
-        },
-    ],
-    ORDERING_FOOD: [
-        {
-            'tutor_message_es': 'Buenas tardes. ¿Una mesa para cuántas personas?',
-            'tutor_message_en': 'Good afternoon. A table for how many people?',
-            'target_word': 'la mesa',
-            'replies': [
-                {'id': 0, 'es': 'Una mesa para dos, por favor.', 'en': 'A table for two, please.',
-                 'is_correct': True, 'why_wrong': ''},
-                {'id': 1, 'es': 'Un mesa para dos, por favor.', 'en': 'A table for two, please.',
-                 'is_correct': False, 'why_wrong': "'mesa' is feminine - it takes 'una'."},
-                {'id': 2, 'es': 'Una mesa por dos, por favor.', 'en': 'A table for two, please.',
-                 'is_correct': False, 'why_wrong': "Use 'para' for purpose, not 'por'."},
-            ],
-        },
-        {
-            'tutor_message_es': 'Perfecto. ¿Qué quiere beber?',
-            'tutor_message_en': 'Perfect. What would you like to drink?',
-            'target_word': 'el agua',
-            'replies': [
-                {'id': 0, 'es': 'Una vaso de agua, por favor.', 'en': 'A glass of water, please.',
-                 'is_correct': False, 'why_wrong': "'vaso' is masculine - it takes 'un'."},
-                {'id': 1, 'es': 'Un vaso de agua, por favor.', 'en': 'A glass of water, please.',
-                 'is_correct': True, 'why_wrong': ''},
-                {'id': 2, 'es': 'Un vaso de la agua, por favor.', 'en': 'A glass of water, please.',
-                 'is_correct': False, 'why_wrong': "Drop the article: 'de agua', not 'de la agua'."},
-            ],
-        },
-        {
-            'tutor_message_es': '¿Desea algo de postre?',
-            'tutor_message_en': 'Would you like any dessert?',
-            'target_word': 'la cuenta',
-            'replies': [
-                {'id': 0, 'es': 'No, gracias. El cuenta, por favor.', 'en': 'No thanks. The bill, please.',
-                 'is_correct': False, 'why_wrong': "'cuenta' is feminine - it takes 'la'."},
-                {'id': 1, 'es': 'No, gracias. La cuento, por favor.', 'en': 'No thanks. The bill, please.',
-                 'is_correct': False, 'why_wrong': "'cuento' means a story - you want 'cuenta'."},
-                {'id': 2, 'es': 'No, gracias. La cuenta, por favor.', 'en': 'No thanks. The bill, please.',
-                 'is_correct': True, 'why_wrong': ''},
-            ],
-        },
-    ],
-    TRAVEL_BASICS: [
-        {
-            'tutor_message_es': 'Buenos días. ¿Adónde va?',
-            'tutor_message_en': 'Good morning. Where are you going?',
-            'target_word': 'el billete',
-            'replies': [
-                {'id': 0, 'es': 'Un billete a Madrid, por favor.', 'en': 'A ticket to Madrid, please.',
-                 'is_correct': True, 'why_wrong': ''},
-                {'id': 1, 'es': 'Una billete a Madrid, por favor.', 'en': 'A ticket to Madrid, please.',
-                 'is_correct': False, 'why_wrong': "'billete' is masculine - it takes 'un'."},
-                {'id': 2, 'es': 'Un billete en Madrid, por favor.', 'en': 'A ticket to Madrid, please.',
-                 'is_correct': False, 'why_wrong': "Destinations take 'a', not 'en'."},
-            ],
-        },
-        {
-            'tutor_message_es': 'Aquí tiene. ¿Busca usted algo más?',
-            'tutor_message_en': 'Here you are. Are you looking for anything else?',
-            'target_word': '¿dónde está?',
-            'replies': [
-                {'id': 0, 'es': '¿Dónde es la estación?', 'en': 'Where is the station?',
-                 'is_correct': False, 'why_wrong': "Location uses 'estar': '¿Dónde está?'"},
-                {'id': 1, 'es': '¿Dónde está la estación?', 'en': 'Where is the station?',
-                 'is_correct': True, 'why_wrong': ''},
-                {'id': 2, 'es': '¿Dónde está el estación?', 'en': 'Where is the station?',
-                 'is_correct': False, 'why_wrong': "'estación' is feminine - it takes 'la'."},
-            ],
-        },
-        {
-            'tutor_message_es': 'La estación está muy cerca de aquí.',
-            'tutor_message_en': 'The station is very close to here.',
-            'target_word': 'a la derecha',
-            'replies': [
-                {'id': 0, 'es': 'Gracias. ¿Es a la derecha?', 'en': 'Thanks. Is it to the right?',
-                 'is_correct': False, 'why_wrong': "Location uses 'estar': '¿Está a la derecha?'"},
-                {'id': 1, 'es': 'Gracias. ¿Está a la derecho?', 'en': 'Thanks. Is it to the right?',
-                 'is_correct': False, 'why_wrong': "The phrase is 'a la derecha', with an -a."},
-                {'id': 2, 'es': 'Gracias. ¿Está a la derecha?', 'en': 'Thanks. Is it to the right?',
-                 'is_correct': True, 'why_wrong': ''},
-            ],
-        },
-    ],
-}
+# Lives in demo_turns.py: it is data, not logic, and it is long enough to
+# bury the adapter if it sits inline. Re-exported here so callers and tests
+# can keep using llm.FALLBACK_TURNS.
 
 FALLBACK_FEEDBACK_EN = (
     "I couldn't check that one just now, so it hasn't affected your review "

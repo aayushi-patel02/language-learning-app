@@ -16,6 +16,7 @@ from django.utils import timezone
 from . import llm
 from .models import (
     DAILY_ROUTINE,
+    TOPIC_SLUGS,
     ConversationSession,
     Turn,
     UserVocabState,
@@ -73,9 +74,11 @@ class ApiTestCase(TestCase):
     """Shared fixtures: enough vocab for a 3-turn session."""
 
     def setUp(self):
-        for n in range(4):
+        # Enough vocabulary for a full-length demo session, so tests never
+        # run off the end of the plan.
+        for n in range(10):
             VocabItem.objects.create(
-                spanish=f'palabra{n}', english=f'word{n}',
+                spanish=f'palabra{n:02d}', english=f'word{n}',
                 topic=TOPIC, difficulty=1)
 
     def start(self, topic=TOPIC):
@@ -224,15 +227,29 @@ class TargetResolutionTests(ApiTestCase):
 class DemoModeSessionLengthTests(ApiTestCase):
     """A demo session must not visibly replay the same canned turns."""
 
-    @override_settings(DEMO_MODE=True, SESSION_TURN_LIMIT=8)
+    @override_settings(DEMO_MODE=True, SESSION_TURN_LIMIT=20)
     def test_demo_session_is_capped_to_the_bank_size(self):
-        bank_size = llm.demo_bank_size(TOPIC)
-        self.assertLess(bank_size, 8, 'precondition: bank is shorter than the limit')
-
+        # A limit above the bank size would wrap and replay turns.
         response = self.client.post(
             reverse('session-start'), {'topic': TOPIC},
             content_type='application/json')
-        self.assertEqual(response.json()['turn_limit'], bank_size)
+        self.assertEqual(
+            response.json()['turn_limit'], llm.demo_bank_size(TOPIC))
+
+    @override_settings(DEMO_MODE=True, SESSION_TURN_LIMIT=2)
+    def test_a_limit_below_the_bank_size_is_left_alone(self):
+        # The cap only ever shortens a session, never lengthens one.
+        response = self.client.post(
+            reverse('session-start'), {'topic': TOPIC},
+            content_type='application/json')
+        self.assertEqual(response.json()['turn_limit'], 2)
+
+    def test_every_topic_has_a_full_length_bank(self):
+        # Each topic must carry enough distinct turns for a default-length
+        # session, or demo mode silently shortens it.
+        for topic in TOPIC_SLUGS:
+            with self.subTest(topic=topic):
+                self.assertGreaterEqual(llm.demo_bank_size(topic), 8)
 
     @override_settings(DEMO_MODE=True, SESSION_TURN_LIMIT=8)
     def test_demo_session_never_repeats_a_tutor_line(self):
