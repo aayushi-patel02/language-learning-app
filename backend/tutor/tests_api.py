@@ -95,6 +95,65 @@ class ApiTestCase(TestCase):
                 content_type='application/json')
 
 
+class TopicListTests(ApiTestCase):
+    """The home screen's review-load counts."""
+
+    def test_lists_all_three_topics(self):
+        body = self.client.get(reverse('topic-list')).json()
+        self.assertEqual([t['id'] for t in body['topics']], TOPIC_SLUGS)
+
+    def test_unseen_vocabulary_counts_as_new(self):
+        body = self.client.get(reverse('topic-list')).json()
+        topic = next(t for t in body['topics'] if t['id'] == TOPIC)
+        self.assertEqual(topic['new'], 10)
+        self.assertEqual(topic['due'], 0)
+        self.assertEqual(topic['scheduled'], 0)
+        self.assertEqual(topic['total'], 10)
+
+    def test_a_reviewed_word_moves_from_new_to_scheduled(self):
+        session_id = self.start().json()['session_id']
+        self.answer_chip(session_id, reply_id=1)   # correct -> due tomorrow
+
+        topic = next(t for t in self.client.get(reverse('topic-list')).json()['topics']
+                     if t['id'] == TOPIC)
+        self.assertEqual(topic['new'], 9)
+        self.assertEqual(topic['scheduled'], 1)
+        self.assertEqual(topic['due'], 0, 'due tomorrow, so not due today')
+
+    def test_an_overdue_word_counts_as_due(self):
+        session_id = self.start().json()['session_id']
+        self.answer_chip(session_id, reply_id=1)
+
+        state = UserVocabState.objects.get(total_reviews=1)
+        state.due_date = timezone.localdate() - timedelta(days=2)
+        state.save()
+
+        topic = next(t for t in self.client.get(reverse('topic-list')).json()['topics']
+                     if t['id'] == TOPIC)
+        self.assertEqual(topic['due'], 1)
+        self.assertEqual(topic['scheduled'], 0)
+
+    def test_counts_always_add_up_to_the_total(self):
+        session_id = self.start().json()['session_id']
+        self.answer_chip(session_id, reply_id=1)
+        for topic in self.client.get(reverse('topic-list')).json()['topics']:
+            with self.subTest(topic=topic['id']):
+                self.assertEqual(
+                    topic['due'] + topic['new'] + topic['scheduled'],
+                    topic['total'])
+
+    def test_listing_does_not_create_scheduling_rows(self):
+        # A GET on the home screen must not write.
+        self.client.get(reverse('topic-list'))
+        self.assertEqual(UserVocabState.objects.count(), 0)
+
+    def test_topic_with_no_vocabulary_reports_zeroes(self):
+        VocabItem.objects.all().delete()
+        for topic in self.client.get(reverse('topic-list')).json()['topics']:
+            with self.subTest(topic=topic['id']):
+                self.assertEqual(topic['total'], 0)
+
+
 class StartSessionTests(ApiTestCase):
     def test_start_returns_first_turn(self):
         response = self.start()

@@ -24,6 +24,7 @@ from rest_framework.views import APIView
 # call time, so tests can patch it without the reference being frozen here.
 from . import llm, sm2
 from .models import (
+    TOPIC_CHOICES,
     TOPIC_SLUGS,
     ConversationSession,
     Turn,
@@ -91,6 +92,51 @@ def _correct_option(chips):
         if chip.get('is_correct'):
             return chip.get('es', '')
     return ''
+
+
+class TopicListView(APIView):
+    """GET /api/topics/ - the three topics with each one's review load.
+
+    The whole premise is "practise what you are about to forget", so the
+    learner has to be able to see that *before* starting a session rather
+    than discovering it turn by turn.
+
+    Read-only on purpose: it does not create UserVocabState rows the way the
+    scheduler does, because a GET on the home screen should not write.
+    """
+
+    def get(self, request):
+        user = get_demo_user()
+        today = timezone.localdate()
+
+        states = {
+            state.item_id: state
+            for state in UserVocabState.objects.filter(user=user)
+        }
+
+        payload = []
+        for slug, label in TOPIC_CHOICES:
+            due = new = scheduled = 0
+            items = VocabItem.objects.filter(topic=slug).only('id')
+            for item in items:
+                state = states.get(item.pk)
+                if state is None or state.total_reviews == 0:
+                    new += 1
+                elif state.due_date <= today:
+                    due += 1
+                else:
+                    scheduled += 1
+
+            payload.append({
+                'id': slug,
+                'label': label,
+                'total': due + new + scheduled,
+                'due': due,              # seen before, ready for review now
+                'new': new,              # never practised
+                'scheduled': scheduled,  # known, not due yet
+            })
+
+        return Response({'topics': payload})
 
 
 class StartSessionView(APIView):
