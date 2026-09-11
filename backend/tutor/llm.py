@@ -143,7 +143,8 @@ Return ONLY a JSON object. No prose, no markdown fences.
 
 # --- providers -------------------------------------------------------------
 
-def _call_openai_compatible(base_url, key_var, model, system_prompt, user_content):
+def _call_openai_compatible(base_url, key_var, model, system_prompt, user_content,
+                            extra_body=None):
     """Talk to any provider that speaks the OpenAI chat-completions protocol.
 
     Both DeepSeek and Groq do, so the official `openai` SDK reaches them by
@@ -169,6 +170,7 @@ def _call_openai_compatible(base_url, key_var, model, system_prompt, user_conten
         # JSON mode removes most parse failures at the source. _extract_json
         # still guards whatever slips through.
         response_format={'type': 'json_object'},
+        **({'extra_body': extra_body} if extra_body else {}),
     )
     return response.choices[0].message.content or ''
 
@@ -188,12 +190,26 @@ def _call_deepseek(system_prompt, user_content):
 
 
 def _call_groq(system_prompt, user_content):
+    model = os.getenv('GROQ_MODEL', DEFAULT_GROQ_MODEL)
+
+    # gpt-oss is a reasoning model: left alone it spends several hundred
+    # hidden tokens deliberating before it writes anything, which on a
+    # measured run was 1.68s versus 0.76s at low effort. Same model, same
+    # Spanish, less than half the wait. Only gpt-oss accepts the parameter,
+    # so it is not sent to anything else.
+    extra_body = None
+    if 'gpt-oss' in model:
+        effort = os.getenv('GROQ_REASONING_EFFORT', 'low').strip().lower()
+        if effort:
+            extra_body = {'reasoning_effort': effort}
+
     return _call_openai_compatible(
         GROQ_BASE_URL,
         'GROQ_API_KEY',
-        os.getenv('GROQ_MODEL', DEFAULT_GROQ_MODEL),
+        model,
         system_prompt,
         user_content,
+        extra_body=extra_body,
     )
 
 
