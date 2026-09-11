@@ -5,7 +5,9 @@ import Chat from './components/Chat'
 import Home from './components/Home'
 import Progress from './components/Progress'
 import Recap from './components/Recap'
+import Vocabulary from './components/Vocabulary'
 import Welcome from './components/Welcome'
+import WordDetail from './components/WordDetail'
 
 const ONBOARDED_KEY = 'charla.onboarded'
 
@@ -48,6 +50,8 @@ export default function App() {
         <Route path="/chat/:topic" element={<ChatRoute />} />
         <Route path="/recap/:sessionId" element={<Recap />} />
         <Route path="/progress" element={<Progress />} />
+        <Route path="/vocabulary" element={<Vocabulary />} />
+        <Route path="/vocabulary/:wordId" element={<WordDetail />} />
         <Route path="*" element={<Landing />} />
       </Routes>
     </BrowserRouter>

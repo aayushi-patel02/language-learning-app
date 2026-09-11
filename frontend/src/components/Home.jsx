@@ -28,14 +28,24 @@ export default function Home() {
             Practise Spanish in conversation. What you get wrong comes back sooner.
           </p>
         </div>
-        <Link
-          to="/progress"
-          className="inline-flex min-h-11 shrink-0 items-center rounded-full border
-                     border-line bg-white px-3 text-xs font-bold transition-colors
-                     hover:border-ink/20"
-        >
-          Progress
-        </Link>
+        <div className="flex shrink-0 flex-col gap-1.5">
+          <Link
+            to="/vocabulary"
+            className="inline-flex min-h-11 items-center justify-center rounded-full
+                       border border-line bg-white px-3 text-xs font-bold
+                       transition-colors hover:border-ink/20"
+          >
+            Words
+          </Link>
+          <Link
+            to="/progress"
+            className="inline-flex min-h-11 items-center justify-center rounded-full
+                       border border-line bg-white px-3 text-xs font-bold
+                       transition-colors hover:border-ink/20"
+          >
+            Progress
+          </Link>
+        </div>
       </header>
 
       {loads !== null && (
