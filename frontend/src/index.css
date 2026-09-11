@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* Tailwind v4 configures the design system here rather than in a JS config
+   file. These tokens are the app's palette, referenced as bg-ink, text-muted
+   and so on. */
+@theme {
+  --color-ink: #1a1a1a;
+  --color-muted: #6b7280;
+  --color-line: #e5e7eb;
+  --color-canvas: #ffffff;
+  --color-surface: #f6f6f7;
+
+  --color-tutor: #f1f2f4;
+  --color-learner: #2563eb;
+
+  --color-right: #16a34a;
+  --color-right-soft: #f0fdf4;
+  --color-wrong: #dc2626;
+  --color-wrong-soft: #fef2f2;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
