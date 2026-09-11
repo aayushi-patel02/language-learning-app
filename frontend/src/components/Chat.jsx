@@ -151,7 +151,9 @@ export default function Chat({ topic }) {
 
   return (
     <Shell topic={topicMeta} progress={progress}>
-      <div className="flex-1 space-y-3 pb-4">
+      {/* justify-end keeps a short conversation sitting above the controls
+          instead of stranding two bubbles at the top of an empty screen. */}
+      <div className="flex flex-1 flex-col justify-end space-y-2.5 pb-4">
         {messages.map((message, index) => (
           <Message key={index} message={message} />
         ))}
@@ -177,8 +179,9 @@ export default function Chat({ topic }) {
         <button
           type="button"
           onClick={() => navigate(`/recap/${sessionId}`)}
-          className="min-h-12 w-full rounded-xl bg-ink px-4 py-3 text-sm font-semibold
-                     text-white transition hover:opacity-90"
+          className="btn-3d min-h-12 w-full rounded-2xl bg-ink px-4 py-3 text-sm
+                     font-extrabold tracking-wide text-white uppercase
+                     hover:brightness-125"
         >
           See your results
         </button>
@@ -310,11 +313,20 @@ function FeedbackPanel({ feedback, isLast, onContinue }) {
         {ungraded ? 'Skipped' : right ? '¡Correcto!' : 'Not quite'}
       </p>
 
+      {/* corrected_es means two different things: for a typed answer it is
+          that sentence fixed, for a tapped chip it is the option that was
+          right - which can be a different sentence entirely. Labelling it
+          stops it reading as a contradiction of the reason below. */}
       {feedback.corrected_es && (
-        <p className="mt-1 text-sm font-medium">{feedback.corrected_es}</p>
+        <>
+          <p className="mt-2 text-[11px] font-bold tracking-wide text-muted uppercase">
+            Correct answer
+          </p>
+          <p className="text-sm font-bold">{feedback.corrected_es}</p>
+        </>
       )}
       {feedback.feedback_en && (
-        <p className="mt-1 text-xs text-muted">{feedback.feedback_en}</p>
+        <p className="mt-1.5 text-xs text-muted">{feedback.feedback_en}</p>
       )}
       {feedback.due_date && (
         <p className="mt-2 text-xs text-muted">
@@ -326,8 +338,9 @@ function FeedbackPanel({ feedback, isLast, onContinue }) {
         type="button"
         autoFocus
         onClick={onContinue}
-        className={`mt-4 min-h-12 w-full rounded-xl px-4 py-3 text-sm font-semibold
-                    text-white transition hover:opacity-90 ${button}`}
+        className={`btn-3d mt-4 min-h-12 w-full rounded-2xl px-4 py-3 text-sm
+                    font-extrabold tracking-wide text-white uppercase
+                    hover:brightness-110 ${button}`}
       >
         {isLast ? 'Finish lesson' : 'Continue'}
       </button>
@@ -366,8 +379,9 @@ function Composer({
             type="button"
             onClick={onSend}
             disabled={disabled || !draft.trim()}
-            className="min-h-11 rounded-lg bg-learner px-4 py-2 text-sm font-semibold
-                       text-white transition hover:opacity-90 disabled:opacity-40"
+            className="btn-3d min-h-11 rounded-xl bg-learner px-4 py-2 text-sm
+                       font-bold text-white hover:brightness-110
+                       disabled:opacity-40"
           >
             Send
           </button>
@@ -391,10 +405,10 @@ function Composer({
           type="button"
           onClick={() => onChip(option)}
           disabled={disabled}
-          className="w-full rounded-xl border-2 border-line px-3 py-3 text-left
-                     transition active:scale-[0.99] hover:border-learner/50
-                     hover:bg-surface disabled:opacity-40 focus:outline-none
-                     focus-visible:ring-2 focus-visible:ring-learner"
+          className="btn-3d w-full rounded-2xl border-2 border-line bg-white px-4 py-3
+                     text-left hover:border-learner/40 hover:bg-surface
+                     disabled:opacity-40 focus:outline-none focus-visible:ring-2
+                     focus-visible:ring-learner"
         >
           <span className="block text-sm font-medium">{option.es}</span>
           {option.en && (

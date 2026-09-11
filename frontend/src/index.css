@@ -1,22 +1,39 @@
 @import "tailwindcss";
+/* Self-hosted so the app never waits on a font CDN mid-demo. */
+@import "@fontsource-variable/nunito";
 
 /* Tailwind v4 configures the design system here rather than in a JS config
    file. These tokens are the app's palette, referenced as bg-ink, text-muted
    and so on. */
 @theme {
-  --color-ink: #1a1a1a;
-  --color-muted: #6b7280;
-  --color-line: #e5e7eb;
-  --color-canvas: #ffffff;
-  --color-surface: #f6f6f7;
+  --font-sans: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
 
-  --color-tutor: #f1f2f4;
-  --color-learner: #2563eb;
+  --color-ink: #1d1b24;
+  --color-muted: #6f6a7d;
+  --color-line: #e8e5ef;
+  --color-canvas: #fbfaff;
+  --color-surface: #f3f1fa;
+
+  --color-tutor: #f1eff9;
+  --color-learner: #5b4bdb;
+  --color-learner-deep: #4436bd;
 
   --color-success: #16a34a;
-  --color-success-soft: #f0fdf4;
-  --color-error: #dc2626;
-  --color-error-soft: #fef2f2;
+  --color-success-soft: #eefbf2;
+  --color-error: #e0335c;
+  --color-error-soft: #fdeef2;
+
+  /* Per-topic accents, so the home screen is not three identical cards. */
+  --color-topic-morning: #f0902a;
+  --color-topic-morning-soft: #fef3e6;
+  --color-topic-food: #e0335c;
+  --color-topic-food-soft: #fdeef2;
+  --color-topic-travel: #2b95d6;
+  --color-topic-travel-soft: #e8f4fc;
+
+  /* A card lift that reads as depth rather than a drop shadow. */
+  --shadow-card: 0 1px 2px rgb(29 27 36 / 0.04), 0 4px 12px rgb(29 27 36 / 0.05);
+  --shadow-lift: 0 2px 4px rgb(29 27 36 / 0.06), 0 10px 24px rgb(29 27 36 / 0.09);
 }
 
 /* The feedback band slides up from the bottom so the correction is hard to
@@ -61,6 +78,25 @@
   }
 }
 
+/* Chunky buttons that depress when tapped. The bottom border is the "side"
+   of the key, so pressing it feels physical instead of flat. */
+.btn-3d {
+  /* border-bottom-style is set explicitly: the solid-colour buttons have no
+     border at all, so a width on its own would render nothing. */
+  border-bottom-style: solid;
+  border-bottom-width: 4px;
+  border-bottom-color: rgb(29 27 36 / 0.16);
+  transition:
+    transform 0.06s ease-out,
+    border-bottom-width 0.06s ease-out,
+    filter 0.15s ease-out;
+}
+
+.btn-3d:active:not(:disabled) {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
 html,
 body,
 #root {
@@ -70,5 +106,6 @@ body,
 body {
   background: var(--color-canvas);
   color: var(--color-ink);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }

@@ -107,16 +107,17 @@ export default function Recap() {
       <div className="mt-8 space-y-2 pb-4">
         <Link
           to={`/chat/${data.topic}`}
-          className="flex min-h-12 items-center justify-center rounded-xl bg-success px-4
-                     py-3 text-sm font-semibold text-white transition hover:opacity-90"
+          className="btn-3d flex min-h-12 items-center justify-center rounded-2xl
+                     bg-success px-4 py-3 text-sm font-extrabold tracking-wide
+                     text-white uppercase hover:brightness-110"
         >
           Next lesson
         </Link>
         <Link
           to="/"
-          className="flex min-h-12 items-center justify-center rounded-xl border-2
-                     border-line px-4 py-3 text-sm font-semibold transition
-                     hover:bg-surface"
+          className="btn-3d flex min-h-12 items-center justify-center rounded-2xl
+                     border-2 border-line bg-white px-4 py-3 text-sm font-extrabold
+                     tracking-wide uppercase hover:bg-surface"
         >
           Back to topics
         </Link>
