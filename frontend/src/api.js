@@ -12,6 +12,9 @@ const api = axios.create({
 // is actually due rather than three inert links.
 export const getTopics = () => api.get('/topics/')
 
+// Cumulative progress across every lesson, for the progress screen.
+export const getProgress = () => api.get('/progress/')
+
 export const startSession = (topic) => api.post('/sessions/start/', { topic })
 
 // Chips are identified by id, not by their text: the backend holds the answer

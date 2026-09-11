@@ -21,11 +21,21 @@ export default function Home() {
 
   return (
     <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-10 pb-12">
-      <header>
-        <h1 className="text-3xl font-extrabold tracking-tight">Charla</h1>
-        <p className="mt-1.5 text-sm leading-relaxed text-muted">
-          Practise Spanish in conversation. What you get wrong comes back sooner.
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Charla</h1>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted">
+            Practise Spanish in conversation. What you get wrong comes back sooner.
+          </p>
+        </div>
+        <Link
+          to="/progress"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-full border
+                     border-line bg-white px-3 text-xs font-bold transition-colors
+                     hover:border-ink/20"
+        >
+          Progress
+        </Link>
       </header>
 
       {loads !== null && (
@@ -44,7 +54,7 @@ export default function Home() {
             </p>
           ) : (
             <p className="text-sm text-muted">
-              Nothing due today — pick a topic to learn new words.
+              Nothing due today. Pick a topic to learn new words.
             </p>
           )}
         </div>
