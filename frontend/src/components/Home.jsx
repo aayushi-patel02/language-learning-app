@@ -31,7 +31,7 @@ export default function Home() {
         <p className="mb-5 text-sm">
           {totalDue > 0 ? (
             <>
-              <span className="font-semibold text-right">{totalDue} words</span>
+              <span className="font-semibold text-success">{totalDue} words</span>
               <span className="text-muted"> ready to review today.</span>
             </>
           ) : (
@@ -83,7 +83,7 @@ function TopicLoad({ load }) {
   return (
     <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       {load.due > 0 && (
-        <span className="font-medium text-right">{load.due} due</span>
+        <span className="font-medium text-success">{load.due} due</span>
       )}
       {load.new > 0 && <span className="text-muted">{load.new} new</span>}
       {load.scheduled > 0 && (

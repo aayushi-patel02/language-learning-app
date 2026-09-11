@@ -18,12 +18,19 @@ export default function Chat({ topic }) {
   const [sessionId, setSessionId] = useState(null)
   const [messages, setMessages] = useState([])
   const [current, setCurrent] = useState(null)
-  // loading | ready | sending | done | error
+  // loading | ready | sending | feedback | done | error
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [typing, setTyping] = useState(false)
   const [draft, setDraft] = useState('')
   const [progress, setProgress] = useState({ answered: 0, limit: 0 })
+
+  // The answer just graded, and the turn waiting behind the Continue button.
+  // Holding the next turn back is deliberate: if it appears immediately the
+  // learner scrolls straight past the correction, which is the part that
+  // actually teaches.
+  const [feedback, setFeedback] = useState(null)
+  const [pending, setPending] = useState(null)
 
   const bottomRef = useRef(null)
   // StrictMode runs effects twice in development. Without this guard every
@@ -55,35 +62,6 @@ export default function Chat({ topic }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, status])
 
-  const applyResult = (data) => {
-    const grade = data.grade
-    setMessages((prev) => [
-      ...prev,
-      {
-        kind: 'feedback',
-        graded: grade.graded,
-        wasCorrect: grade.was_correct,
-        feedbackEn: grade.feedback_en,
-        correctedEs: grade.corrected_es,
-        dueDate: grade.due_date,
-        intervalDays: grade.interval_days,
-      },
-    ])
-    setProgress((prev) => ({ ...prev, answered: prev.answered + 1 }))
-
-    if (data.is_complete || !data.turn) {
-      setCurrent(null)
-      setStatus('done')
-      return
-    }
-    setMessages((prev) => [
-      ...prev,
-      { kind: 'tutor', es: data.turn.ai_message, en: data.turn.ai_message_en },
-    ])
-    setCurrent(data.turn)
-    setStatus('ready')
-  }
-
   const submit = async (label, request) => {
     if (status !== 'ready') return
     setStatus('sending')
@@ -91,10 +69,30 @@ export default function Chat({ topic }) {
     setMessages((prev) => [...prev, { kind: 'learner', text: label }])
     try {
       const { data } = await request()
-      applyResult(data)
+      const grade = data.grade
+
+      // Tag the learner's bubble so the transcript keeps a quiet record of
+      // how each answer went.
+      setMessages((prev) => {
+        const next = [...prev]
+        const last = next[next.length - 1]
+        if (last?.kind === 'learner') {
+          next[next.length - 1] = {
+            ...last,
+            graded: grade.graded,
+            wasCorrect: grade.was_correct,
+          }
+        }
+        return next
+      })
+
+      setProgress((prev) => ({ ...prev, answered: prev.answered + 1 }))
+      setFeedback(grade)
+      setPending(data.is_complete ? null : data.turn)
+      setStatus('feedback')
     } catch (err) {
       setError(describeError(err))
-      setStatus('ready') // let them try the same turn again
+      setStatus('ready') // let them retry the same turn
     }
   }
 
@@ -109,10 +107,26 @@ export default function Chat({ topic }) {
     return submit(text, () => sendFreetext(sessionId, text))
   }
 
+  const advance = () => {
+    setFeedback(null)
+    if (!pending) {
+      setCurrent(null)
+      setStatus('done')
+      return
+    }
+    setMessages((prev) => [
+      ...prev,
+      { kind: 'tutor', es: pending.ai_message, en: pending.ai_message_en },
+    ])
+    setCurrent(pending)
+    setPending(null)
+    setStatus('ready')
+  }
+
   if (status === 'loading') {
     return (
       <Shell topic={topicMeta}>
-        <p className="py-16 text-center text-sm text-muted">Starting a session…</p>
+        <p className="py-16 text-center text-sm text-muted">Starting a lesson…</p>
       </Shell>
     )
   }
@@ -120,11 +134,14 @@ export default function Chat({ topic }) {
   if (status === 'error' && !sessionId) {
     return (
       <Shell topic={topicMeta}>
-        <div className="rounded-xl border border-line bg-wrong-soft px-4 py-5">
-          <p className="text-sm font-medium text-wrong">Could not start the session</p>
+        <div className="rounded-xl border border-line bg-error-soft px-4 py-5">
+          <p className="text-sm font-medium text-error">Could not start the lesson</p>
           <p className="mt-1 text-xs text-muted">{error}</p>
         </div>
-        <Link to="/" className="mt-4 inline-block text-xs text-muted underline">
+        <Link
+          to="/"
+          className="mt-4 inline-flex min-h-11 items-center text-xs text-muted underline"
+        >
           Back to topics
         </Link>
       </Shell>
@@ -137,28 +154,36 @@ export default function Chat({ topic }) {
         {messages.map((message, index) => (
           <Message key={index} message={message} />
         ))}
-        {status === 'sending' && (
-          <p className="pl-1 text-xs text-muted">…</p>
-        )}
+        {status === 'sending' && <Thinking />}
         <div ref={bottomRef} />
       </div>
 
       {error && status === 'ready' && (
-        <p className="mb-2 rounded-lg bg-wrong-soft px-3 py-2 text-xs text-wrong">
+        <p className="mb-2 rounded-lg bg-error-soft px-3 py-2 text-xs text-error">
           {error} Try again.
         </p>
       )}
 
-      {status === 'done' ? (
+      {status === 'feedback' && feedback && (
+        <FeedbackPanel
+          feedback={feedback}
+          isLast={!pending}
+          onContinue={advance}
+        />
+      )}
+
+      {status === 'done' && (
         <button
           type="button"
           onClick={() => navigate(`/recap/${sessionId}`)}
-          className="w-full rounded-xl bg-ink px-4 py-3 text-sm font-medium text-white
-                     transition hover:opacity-90"
+          className="min-h-12 w-full rounded-xl bg-ink px-4 py-3 text-sm font-semibold
+                     text-white transition hover:opacity-90"
         >
-          See your recap
+          See your results
         </button>
-      ) : (
+      )}
+
+      {(status === 'ready' || status === 'sending') && (
         <Composer
           current={current}
           disabled={status !== 'ready'}
@@ -176,19 +201,44 @@ export default function Chat({ topic }) {
 }
 
 function Shell({ topic, progress, children }) {
+  const done = progress?.answered ?? 0
+  const total = progress?.limit ?? 0
+  const percent = total ? Math.round((done / total) * 100) : 0
+
   return (
-    <div className="mx-auto flex min-h-full max-w-md flex-col px-5 py-6">
-      <header className="mb-3 flex items-center justify-between">
+    <div className="mx-auto flex min-h-full max-w-md flex-col px-5 py-5">
+      <header className="mb-4 flex items-center gap-3">
         <Link
           to="/"
-          className="-ml-1 inline-flex min-h-11 items-center px-1 text-sm text-muted
-                     hover:text-ink"
+          aria-label="Leave this lesson"
+          className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
+                     text-lg text-muted transition hover:text-ink"
         >
-          &larr;&nbsp;<span className="font-medium">{topic?.label ?? 'Practice'}</span>
+          &times;
         </Link>
-        {progress?.limit > 0 && (
-          <span className="text-xs text-muted">
-            {Math.min(progress.answered + 1, progress.limit)} / {progress.limit}
+        {total > 0 ? (
+          <div
+            role="progressbar"
+            aria-valuenow={done}
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-label={`${done} of ${total} answered`}
+            className="h-3 flex-1 overflow-hidden rounded-full bg-line"
+          >
+            <div
+              className="h-full rounded-full bg-success transition-[width] duration-500
+                         ease-out"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        ) : (
+          <span className="flex-1 text-sm font-medium text-muted">
+            {topic?.label ?? 'Practice'}
+          </span>
+        )}
+        {total > 0 && (
+          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted">
+            {done}/{total}
           </span>
         )}
       </header>
@@ -197,55 +247,90 @@ function Shell({ topic, progress, children }) {
   )
 }
 
+function Thinking() {
+  return (
+    <div className="flex w-fit gap-1 rounded-2xl rounded-tl-sm bg-tutor px-4 py-3">
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted"
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </div>
+  )
+}
+
 function Message({ message }) {
   if (message.kind === 'tutor') {
     return (
-      <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-tutor px-4 py-2.5">
+      <div className="animate-rise max-w-[85%] rounded-2xl rounded-tl-sm bg-tutor px-4 py-2.5">
         <p className="text-sm">{message.es}</p>
-        {message.en && (
-          <p className="mt-1 text-xs text-muted">{message.en}</p>
-        )}
+        {message.en && <p className="mt-1 text-xs text-muted">{message.en}</p>}
       </div>
     )
   }
 
-  if (message.kind === 'learner') {
-    return (
-      <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-tr-sm bg-learner px-4 py-2.5">
-        <p className="text-sm text-white">{message.text}</p>
-      </div>
-    )
-  }
-
-  // feedback
-  if (!message.graded) {
-    return (
-      <p className="ml-auto w-fit max-w-[85%] text-right text-xs text-muted">
-        {message.feedbackEn}
-      </p>
-    )
-  }
-
-  const tone = message.wasCorrect
-    ? 'bg-right-soft text-right'
-    : 'bg-wrong-soft text-wrong'
+  // A quiet record in the transcript; the loud version is the feedback panel.
+  const edge =
+    message.graded === false
+      ? ''
+      : message.wasCorrect
+        ? 'ring-2 ring-success/40'
+        : message.wasCorrect === false
+          ? 'ring-2 ring-error/40'
+          : ''
 
   return (
-    <div className={`ml-auto w-fit max-w-[85%] rounded-lg px-3 py-2 text-right ${tone}`}>
-      <p className="text-xs font-medium">
-        {message.wasCorrect ? 'Correct' : 'Not quite'}
+    <div
+      className={`animate-rise ml-auto w-fit max-w-[85%] rounded-2xl rounded-tr-sm
+                  bg-learner px-4 py-2.5 ${edge}`}
+    >
+      <p className="text-sm text-white">{message.text}</p>
+    </div>
+  )
+}
+
+function FeedbackPanel({ feedback, isLast, onContinue }) {
+  const ungraded = !feedback.graded
+  const right = feedback.was_correct
+
+  const tone = ungraded
+    ? 'bg-surface'
+    : right
+      ? 'bg-success-soft'
+      : 'bg-error-soft'
+  const accent = ungraded ? 'text-muted' : right ? 'text-success' : 'text-error'
+  const button = ungraded ? 'bg-ink' : right ? 'bg-success' : 'bg-error'
+
+  return (
+    <div className={`animate-rise -mx-5 -mb-5 mt-3 px-5 pt-4 pb-5 ${tone}`}>
+      <p className={`text-base font-bold ${accent}`}>
+        {ungraded ? 'Skipped' : right ? '¡Correcto!' : 'Not quite'}
       </p>
-      {message.feedbackEn && (
-        <p className="mt-0.5 text-xs opacity-90">{message.feedbackEn}</p>
+
+      {feedback.corrected_es && (
+        <p className="mt-1 text-sm font-medium">{feedback.corrected_es}</p>
       )}
-      {message.correctedEs && (
-        <p className="mt-1 text-xs font-medium">{message.correctedEs}</p>
+      {feedback.feedback_en && (
+        <p className="mt-1 text-xs text-muted">{feedback.feedback_en}</p>
       )}
-      {message.dueDate && (
-        <p className="mt-1 text-[11px] text-muted">
-          Next review {message.dueDate}
+      {feedback.due_date && (
+        <p className="mt-2 text-xs text-muted">
+          Next review in {feedback.interval_days}
+          {feedback.interval_days === 1 ? ' day' : ' days'} · {feedback.due_date}
         </p>
       )}
+
+      <button
+        type="button"
+        autoFocus
+        onClick={onContinue}
+        className={`mt-4 min-h-12 w-full rounded-xl px-4 py-3 text-sm font-semibold
+                    text-white transition hover:opacity-90 ${button}`}
+      >
+        {isLast ? 'Finish lesson' : 'Continue'}
+      </button>
     </div>
   )
 }
@@ -281,7 +366,7 @@ function Composer({
             type="button"
             onClick={onSend}
             disabled={disabled || !draft.trim()}
-            className="min-h-11 rounded-lg bg-learner px-4 py-2 text-sm font-medium
+            className="min-h-11 rounded-lg bg-learner px-4 py-2 text-sm font-semibold
                        text-white transition hover:opacity-90 disabled:opacity-40"
           >
             Send
@@ -306,11 +391,12 @@ function Composer({
           type="button"
           onClick={() => onChip(option)}
           disabled={disabled}
-          className="w-full rounded-lg border border-line px-3 py-2.5 text-left transition
-                     hover:border-ink/25 hover:bg-surface disabled:opacity-40
-                     focus:outline-none focus-visible:ring-2 focus-visible:ring-learner"
+          className="w-full rounded-xl border-2 border-line px-3 py-3 text-left
+                     transition active:scale-[0.99] hover:border-learner/50
+                     hover:bg-surface disabled:opacity-40 focus:outline-none
+                     focus-visible:ring-2 focus-visible:ring-learner"
         >
-          <span className="block text-sm">{option.es}</span>
+          <span className="block text-sm font-medium">{option.es}</span>
           {option.en && (
             <span className="mt-0.5 block text-xs text-muted">{option.en}</span>
           )}
@@ -334,7 +420,7 @@ function Composer({
           onClick={onEnd}
           className="inline-flex min-h-11 items-center pl-3 text-xs text-muted underline"
         >
-          End session
+          End lesson
         </button>
       </div>
     </div>

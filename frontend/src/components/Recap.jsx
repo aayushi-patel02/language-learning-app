@@ -33,7 +33,7 @@ export default function Recap() {
   if (error) {
     return (
       <Shell>
-        <p className="rounded-lg bg-wrong-soft px-3 py-2 text-sm text-wrong">{error}</p>
+        <p className="rounded-lg bg-error-soft px-3 py-2 text-sm text-error">{error}</p>
       </Shell>
     )
   }
@@ -51,10 +51,21 @@ export default function Recap() {
 
   return (
     <Shell>
-      <h1 className="text-xl font-semibold tracking-tight">Session recap</h1>
-      <p className="mt-1 text-sm text-muted">{data.topic_label}</p>
+      <div className="animate-pop py-4 text-center">
+        <div
+          aria-hidden="true"
+          className="mx-auto flex h-16 w-16 items-center justify-center rounded-full
+                     bg-success-soft text-3xl text-success"
+        >
+          ✓
+        </div>
+        <h1 className="mt-4 text-2xl font-bold tracking-tight">
+          ¡Lección completa!
+        </h1>
+        <p className="mt-1 text-sm text-muted">{data.topic_label}</p>
+      </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-3">
+      <div className="mt-4 grid grid-cols-3 gap-3">
         <Stat label="Words" value={data.words_practiced} />
         <Stat label="Correct" value={`${data.turns_correct}/${data.turns_graded}`} />
         <Stat label="Accuracy" value={accuracy} />
@@ -78,8 +89,8 @@ export default function Recap() {
                   !word.graded
                     ? 'bg-muted'
                     : word.was_correct
-                      ? 'bg-right'
-                      : 'bg-wrong'
+                      ? 'bg-success'
+                      : 'bg-error'
                 }`}
               />
               <span className="min-w-0 flex-1">
@@ -108,20 +119,21 @@ export default function Recap() {
         interval; each correct answer pushes it further out.
       </p>
 
-      <div className="mt-8 flex gap-3">
-        <Link
-          to="/"
-          className="flex-1 rounded-xl bg-ink px-4 py-3 text-center text-sm font-medium
-                     text-white transition hover:opacity-90"
-        >
-          Back to topics
-        </Link>
+      <div className="mt-8 space-y-2 pb-4">
         <Link
           to={`/chat/${data.topic}`}
-          className="flex-1 rounded-xl border border-line px-4 py-3 text-center text-sm
-                     font-medium transition hover:bg-surface"
+          className="flex min-h-12 items-center justify-center rounded-xl bg-success px-4
+                     py-3 text-sm font-semibold text-white transition hover:opacity-90"
         >
-          Practise again
+          Next lesson
+        </Link>
+        <Link
+          to="/"
+          className="flex min-h-12 items-center justify-center rounded-xl border-2
+                     border-line px-4 py-3 text-sm font-semibold transition
+                     hover:bg-surface"
+        >
+          Back to topics
         </Link>
       </div>
     </Shell>
@@ -136,9 +148,9 @@ function Shell({ children }) {
 
 function Stat({ label, value }) {
   return (
-    <div className="rounded-xl bg-surface px-3 py-3">
-      <p className="text-xs text-muted">{label}</p>
-      <p className="mt-0.5 text-lg font-semibold">{value}</p>
+    <div className="rounded-xl bg-surface px-3 py-3 text-center">
+      <p className="text-lg font-bold tabular-nums">{value}</p>
+      <p className="mt-0.5 text-xs text-muted">{label}</p>
     </div>
   )
 }
