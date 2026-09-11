@@ -31,9 +31,6 @@
   --color-topic-travel: #2b95d6;
   --color-topic-travel-soft: #e8f4fc;
 
-  /* A card lift that reads as depth rather than a drop shadow. */
-  --shadow-card: 0 1px 2px rgb(29 27 36 / 0.04), 0 4px 12px rgb(29 27 36 / 0.05);
-  --shadow-lift: 0 2px 4px rgb(29 27 36 / 0.06), 0 10px 24px rgb(29 27 36 / 0.09);
 }
 
 /* The feedback band slides up from the bottom so the correction is hard to
@@ -104,8 +101,28 @@ body,
 }
 
 body {
-  background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+
+  /* Doodle texture fills the space either side of the app column on wide
+     screens. The column itself paints a solid background over it, so the
+     pattern only ever shows in the margins and never behind text. */
+  background-color: var(--color-canvas);
+  background-image: url('/doodles.svg');
+  background-size: 260px 260px;
+  background-repeat: repeat;
+  background-attachment: fixed;
+}
+
+/* The readable column. Opaque, so it masks the texture behind it. */
+.app-column {
+  background-color: var(--color-canvas);
+}
+
+@media (min-width: 48rem) {
+  /* Only hint at an edge once there is actually a margin to separate from. */
+  .app-column {
+    border-inline: 1px solid var(--color-line);
+  }
 }

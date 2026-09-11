@@ -20,7 +20,7 @@ export default function Home() {
   const totalDue = loads?.reduce((sum, topic) => sum + topic.due, 0) ?? 0
 
   return (
-    <div className="mx-auto flex min-h-full max-w-md flex-col px-5 pt-10 pb-12">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-10 pb-12">
       <header>
         <h1 className="text-3xl font-extrabold tracking-tight">Charla</h1>
         <p className="mt-1.5 text-sm leading-relaxed text-muted">
@@ -56,8 +56,7 @@ export default function Home() {
             key={topic.id}
             to={`/chat/${topic.id}`}
             className="group flex items-center gap-4 rounded-2xl border border-line
-                       bg-white px-4 py-4 shadow-card transition
-                       hover:-translate-y-0.5 hover:shadow-lift
+                       bg-white px-4 py-4 transition-colors hover:border-ink/20
                        focus:outline-none focus-visible:ring-2
                        focus-visible:ring-learner"
           >

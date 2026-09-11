@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260">
+  <!-- Tileable line-art backdrop for the empty space either side of the app
+       column. Language-learning motifs, drawn at a deliberately low opacity:
+       it should read as texture, never as content. Glyphs are kept clear of
+       the tile edges so repeating does not cut any of them in half. -->
+  <g fill="none" stroke="#3a2f6b" stroke-opacity="0.09" stroke-width="1.6"
+     stroke-linecap="round" stroke-linejoin="round">
+
+    <!-- speech bubble -->
+    <path d="M22 26h40a6 6 0 0 1 6 6v18a6 6 0 0 1-6 6H40l-10 9v-9h-8a6 6 0 0 1-6-6V32a6 6 0 0 1 6-6Z"/>
+    <path d="M32 40h20M32 48h12"/>
+
+    <!-- sun -->
+    <circle cx="128" cy="36" r="9"/>
+    <path d="M128 18v5M128 49v5M110 36h5M141 36h5M115.5 23.5l3.5 3.5M136.5 45.5l3.5 3.5M140.5 23.5l-3.5 3.5M119 45.5l-3.5 3.5"/>
+
+    <!-- open book -->
+    <path d="M196 30c8-5 16-5 22 0v26c-6-5-14-5-22 0Zm22 0c6-5 14-5 22 0v26c-8-5-16-5-22 0Z"/>
+
+    <!-- coffee cup -->
+    <path d="M30 108h30v14a10 10 0 0 1-10 10H40a10 10 0 0 1-10-10Z"/>
+    <path d="M60 112h6a5 5 0 0 1 0 10h-6"/>
+    <path d="M38 98c2-3 0-5 2-8M48 98c2-3 0-5 2-8"/>
+
+    <!-- globe -->
+    <circle cx="128" cy="118" r="18"/>
+    <path d="M110 118h36M128 100c6 6 6 30 0 36M128 100c-6 6-6 30 0 36"/>
+
+    <!-- paper plane -->
+    <path d="M198 126l40-20-10 38-8-14-22-4Z"/>
+
+    <!-- question mark in a circle -->
+    <circle cx="36" cy="196" r="15"/>
+    <path d="M31 190a5 5 0 0 1 10 1c0 4-5 4-5 8"/>
+    <path d="M36 204v1"/>
+
+    <!-- letter enye -->
+    <path d="M116 216v-24M116 192c8 0 8 24 16 24M132 216v-24"/>
+    <path d="M118 182c4-4 10-4 14 0"/>
+
+    <!-- musical note -->
+    <path d="M206 214v-30l22-5v30"/>
+    <ellipse cx="200" cy="216" rx="6" ry="5"/>
+    <ellipse cx="222" cy="211" rx="6" ry="5"/>
+
+    <!-- small sparkles and dots scattered to break up the grid -->
+    <path d="M84 74l3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="M170 168l2.5 5 5 2.5-5 2.5-2.5 5-2.5-5-5-2.5 5-2.5Z"/>
+    <path d="M76 150l2 4 4 2-4 2-2 4-2-4-4-2 4-2Z"/>
+    <circle cx="180" cy="68" r="2.5"/>
+    <circle cx="96" cy="118" r="2.5"/>
+    <circle cx="246" cy="88" r="2.5"/>
+    <circle cx="12" cy="152" r="2.5"/>
+    <circle cx="164" cy="240" r="2.5"/>
+    <circle cx="72" cy="240" r="2.5"/>
+    <circle cx="246" cy="180" r="2.5"/>
+    <circle cx="12" cy="66" r="2.5"/>
+
+    <!-- accent marks, the thing beginners always drop -->
+    <path d="M152 84l6-6M64 20l6-6M240 152l6-6"/>
+  </g>
+</svg>

@@ -210,7 +210,7 @@ function Shell({ topic, progress, children }) {
   const percent = total ? Math.round((done / total) * 100) : 0
 
   return (
-    <div className="mx-auto flex min-h-full max-w-md flex-col px-5 py-5">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 py-5">
       <header className="mb-4 flex items-center gap-3">
         <Link
           to="/"

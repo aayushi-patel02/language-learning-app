@@ -128,7 +128,7 @@ export default function Recap() {
 
 function Shell({ children }) {
   return (
-    <div className="mx-auto min-h-full max-w-md px-5 py-8">{children}</div>
+    <div className="app-column mx-auto min-h-full max-w-md px-5 py-8">{children}</div>
   )
 }
 
