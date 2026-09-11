@@ -51,6 +51,11 @@ MAX_QUALITY = 5
 # A grade of 3 or better counts as a successful recall.
 PASSING_QUALITY = 3
 
+# Consecutive successful recalls before a word is reported as well retained.
+# Three is where SM-2's interval has grown past a fortnight, so it is a fair
+# point to call something learned rather than merely seen.
+STRONG_REPETITIONS = 3
+
 # --- mapping this app's answer modes onto the 0-5 grade scale ---
 QUALITY_CHIP_CORRECT = 4
 QUALITY_CHIP_INCORRECT = 2

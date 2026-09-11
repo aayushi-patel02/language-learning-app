@@ -139,6 +139,61 @@ class TopicListView(APIView):
         return Response({'topics': payload})
 
 
+class ProgressView(APIView):
+    """GET /api/progress/ - cumulative progress across every lesson so far.
+
+    Every number here already existed in UserVocabState; none of it was
+    reachable from the app. A learner could see what was due today but never
+    how far they had come, which is the part that makes spaced repetition feel
+    worth continuing.
+    """
+
+    def get(self, request):
+        user = get_demo_user()
+        today = timezone.localdate()
+
+        states = list(
+            UserVocabState.objects.filter(user=user).select_related('item')
+        )
+        # A row exists as soon as the scheduler looks at a word, so "started"
+        # has to mean actually answered at least once.
+        started = [state for state in states if state.total_reviews > 0]
+
+        reviews = sum(state.total_reviews for state in started)
+        correct = sum(state.correct_reviews for state in started)
+        lapses = sum(state.lapses for state in started)
+
+        def is_strong(state):
+            return state.repetitions >= sm2.STRONG_REPETITIONS
+
+        topics = []
+        for slug, label in TOPIC_CHOICES:
+            topic_total = VocabItem.objects.filter(topic=slug).count()
+            topic_started = [s for s in started if s.item.topic == slug]
+            topics.append({
+                'id': slug,
+                'label': label,
+                'total': topic_total,
+                'started': len(topic_started),
+                'strong': sum(1 for s in topic_started if is_strong(s)),
+            })
+
+        return Response({
+            'vocabulary_total': VocabItem.objects.count(),
+            'words_started': len(started),
+            'words_strong': sum(1 for state in started if is_strong(state)),
+            'words_due_today': sum(
+                1 for state in started if state.due_date <= today),
+            'total_reviews': reviews,
+            'total_correct': correct,
+            'total_lapses': lapses,
+            'accuracy': round(correct / reviews, 3) if reviews else None,
+            'lessons_completed': ConversationSession.objects.filter(
+                user=user, is_complete=True).count(),
+            'topics': topics,
+        })
+
+
 class StartSessionView(APIView):
     """POST /api/sessions/start/ - begin a session and return the first turn."""
 

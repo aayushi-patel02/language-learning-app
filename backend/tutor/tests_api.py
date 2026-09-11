@@ -13,7 +13,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from . import llm
+from . import llm, sm2
 from .models import (
     DAILY_ROUTINE,
     TOPIC_SLUGS,
@@ -152,6 +152,99 @@ class TopicListTests(ApiTestCase):
         for topic in self.client.get(reverse('topic-list')).json()['topics']:
             with self.subTest(topic=topic['id']):
                 self.assertEqual(topic['total'], 0)
+
+
+class ProgressTests(ApiTestCase):
+    """The cumulative progress screen."""
+
+    def test_reports_nothing_started_before_any_lesson(self):
+        body = self.client.get(reverse('progress')).json()
+        self.assertEqual(body['words_started'], 0)
+        self.assertEqual(body['words_strong'], 0)
+        self.assertEqual(body['total_reviews'], 0)
+        self.assertIsNone(body['accuracy'])
+        self.assertEqual(body['lessons_completed'], 0)
+        self.assertEqual(body['vocabulary_total'], 10)
+
+    def test_scheduler_rows_alone_do_not_count_as_started(self):
+        # Starting a lesson creates a state row per item; only an answered
+        # word has actually been practised.
+        self.start()
+        body = self.client.get(reverse('progress')).json()
+        self.assertGreater(UserVocabState.objects.count(), 0)
+        self.assertEqual(body['words_started'], 0)
+
+    def test_an_answered_word_counts_as_started(self):
+        session_id = self.start().json()['session_id']
+        self.answer_chip(session_id, reply_id=1)
+
+        body = self.client.get(reverse('progress')).json()
+        self.assertEqual(body['words_started'], 1)
+        self.assertEqual(body['total_reviews'], 1)
+        self.assertEqual(body['total_correct'], 1)
+        self.assertEqual(body['accuracy'], 1.0)
+
+    def test_accuracy_reflects_wrong_answers(self):
+        session_id = self.start().json()['session_id']
+        self.answer_chip(session_id, reply_id=1)   # right
+        self.answer_chip(session_id, reply_id=0)   # wrong
+
+        body = self.client.get(reverse('progress')).json()
+        self.assertEqual(body['total_reviews'], 2)
+        self.assertEqual(body['total_correct'], 1)
+        self.assertEqual(body['accuracy'], 0.5)
+
+    def test_a_word_is_strong_only_after_three_correct_in_a_row(self):
+        session_id = self.start().json()['session_id']
+        self.answer_chip(session_id, reply_id=1)
+        state = UserVocabState.objects.get(total_reviews=1)
+
+        for expected_strong in (0, 0, 1):
+            body = self.client.get(reverse('progress')).json()
+            self.assertEqual(body['words_strong'], expected_strong)
+            if expected_strong:
+                break
+            sm2.apply_review(state, 5)
+            state.save()
+
+        self.assertGreaterEqual(state.repetitions, sm2.STRONG_REPETITIONS)
+
+    def test_forgetting_a_known_word_is_counted(self):
+        session_id = self.start().json()['session_id']
+        self.answer_chip(session_id, reply_id=1)   # learn it
+        state = UserVocabState.objects.get(total_reviews=1)
+        sm2.apply_review(state, 1)                 # then forget it
+        state.save()
+
+        body = self.client.get(reverse('progress')).json()
+        self.assertEqual(body['total_lapses'], 1)
+        self.assertEqual(body['words_strong'], 0)
+
+    def test_completed_lessons_are_counted(self):
+        session_id = self.start().json()['session_id']
+        for _ in range(3):
+            self.answer_chip(session_id, reply_id=1)
+        self.assertEqual(
+            self.client.get(reverse('progress')).json()['lessons_completed'], 1)
+
+    def test_per_topic_counts_are_scoped_and_add_up(self):
+        session_id = self.start().json()['session_id']
+        self.answer_chip(session_id, reply_id=1)
+
+        body = self.client.get(reverse('progress')).json()
+        self.assertEqual([t['id'] for t in body['topics']], TOPIC_SLUGS)
+        practised = next(t for t in body['topics'] if t['id'] == TOPIC)
+        self.assertEqual(practised['started'], 1)
+        self.assertEqual(
+            sum(t['started'] for t in body['topics']), body['words_started'])
+        for topic in body['topics']:
+            with self.subTest(topic=topic['id']):
+                self.assertLessEqual(topic['strong'], topic['started'])
+                self.assertLessEqual(topic['started'], topic['total'])
+
+    def test_reading_progress_does_not_write(self):
+        self.client.get(reverse('progress'))
+        self.assertEqual(UserVocabState.objects.count(), 0)
 
 
 class StartSessionTests(ApiTestCase):
