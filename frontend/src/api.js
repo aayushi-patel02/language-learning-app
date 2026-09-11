@@ -8,6 +8,10 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// Topic list with each one's review load, so the home screen can show what
+// is actually due rather than three inert links.
+export const getTopics = () => api.get('/topics/')
+
 export const startSession = (topic) => api.post('/sessions/start/', { topic })
 
 // Chips are identified by id, not by their text: the backend holds the answer
