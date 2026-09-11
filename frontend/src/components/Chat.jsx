@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { sendChip, sendFreetext, startSession } from '../api'
+import { formatDue } from '../dates'
 import { topicById } from '../topics'
 
 function describeError(err) {
@@ -317,8 +318,7 @@ function FeedbackPanel({ feedback, isLast, onContinue }) {
       )}
       {feedback.due_date && (
         <p className="mt-2 text-xs text-muted">
-          Next review in {feedback.interval_days}
-          {feedback.interval_days === 1 ? ' day' : ' days'} · {feedback.due_date}
+          You&rsquo;ll see this word again {formatDue(feedback.due_date)}.
         </p>
       )}
 

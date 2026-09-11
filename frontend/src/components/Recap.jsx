@@ -2,20 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { getRecap } from '../api'
-
-function formatDue(dueDate) {
-  if (!dueDate) return null
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const due = new Date(`${dueDate}T00:00:00`)
-  const days = Math.round((due - today) / 86400000)
-
-  if (days <= 0) return 'today'
-  if (days === 1) return 'tomorrow'
-  if (days < 7) return `in ${days} days`
-  if (days < 30) return `in ${Math.round(days / 7)} weeks`
-  return `in ${Math.round(days / 30)} months`
-}
+import { formatDue, formatStreak } from '../dates'
 
 export default function Recap() {
   const { sessionId } = useParams()
@@ -72,7 +59,7 @@ export default function Recap() {
       </div>
 
       <h2 className="mt-8 text-xs font-medium tracking-wide text-muted uppercase">
-        Next review
+        When you&rsquo;ll see these again
       </h2>
 
       {data.words.length === 0 ? (
@@ -103,11 +90,9 @@ export default function Recap() {
                 <span className="block text-xs">
                   {word.graded ? formatDue(word.due_date) : 'not graded'}
                 </span>
-                {word.graded && word.interval_days != null && (
-                  <span className="block text-[11px] text-muted">
-                    {word.interval_days}d interval
-                  </span>
-                )}
+                <span className="block text-[11px] text-muted">
+                  {formatStreak(word)}
+                </span>
               </span>
             </li>
           ))}
