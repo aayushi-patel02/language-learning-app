@@ -34,7 +34,7 @@ export default function Recap() {
   }
 
   const accuracy =
-    data.accuracy === null ? '—' : `${Math.round(data.accuracy * 100)}%`
+    data.accuracy === null ? 'n/a' : `${Math.round(data.accuracy * 100)}%`
 
   return (
     <Shell>
