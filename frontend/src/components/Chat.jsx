@@ -87,6 +87,10 @@ export default function Chat({ topic }) {
         return next
       })
 
+      // The verdict is a turn in the conversation, not a form below it, so it
+      // goes into the transcript like anything else the tutor says.
+      setMessages((prev) => [...prev, { kind: 'verdict', grade }])
+
       setProgress((prev) => ({ ...prev, answered: prev.answered + 1 }))
       setFeedback(grade)
       setPending(data.is_complete ? null : data.turn)
@@ -168,11 +172,22 @@ export default function Chat({ topic }) {
       )}
 
       {status === 'feedback' && feedback && (
-        <FeedbackPanel
-          feedback={feedback}
-          isLast={!pending}
-          onContinue={advance}
-        />
+        <button
+          type="button"
+          autoFocus
+          onClick={advance}
+          className={`btn-3d min-h-12 w-full rounded-2xl px-4 py-3 text-sm
+                      font-extrabold tracking-wide text-white uppercase
+                      hover:brightness-110 ${
+                        !feedback.graded
+                          ? 'bg-ink'
+                          : feedback.was_correct
+                            ? 'bg-success'
+                            : 'bg-error'
+                      }`}
+        >
+          {pending ? 'Continue' : 'Finish lesson'}
+        </button>
       )}
 
       {status === 'done' && (
@@ -192,13 +207,50 @@ export default function Chat({ topic }) {
           current={current}
           disabled={status !== 'ready'}
           typing={typing}
-          setTyping={setTyping}
           draft={draft}
           setDraft={setDraft}
           onChip={answerChip}
           onSend={answerFreetext}
-          onEnd={() => navigate(`/recap/${sessionId}`)}
         />
+      )}
+
+      {/* One row, always in the same place. It lives outside the composer so
+          "End lesson" survives the feedback state: the header's close button
+          abandons the lesson, this one finishes it early and still shows the
+          recap, which is a different intent. */}
+      {status !== 'done' && (
+        <div className="flex items-center justify-between">
+          {status === 'feedback' ? (
+            <span />
+          ) : typing ? (
+            <button
+              type="button"
+              onClick={() => setTyping(false)}
+              className="inline-flex min-h-11 items-center pr-3 text-xs text-muted
+                         underline"
+            >
+              Choose a reply instead
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setTyping(true)}
+              disabled={status !== 'ready'}
+              className="inline-flex min-h-11 items-center pr-3 text-xs text-muted
+                         underline disabled:opacity-40"
+            >
+              Type your own instead
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => navigate(`/recap/${sessionId}`)}
+            className="inline-flex min-h-11 items-center pl-3 text-xs text-muted
+                       underline"
+          >
+            End lesson
+          </button>
+        </div>
       )}
     </Shell>
   )
@@ -266,6 +318,8 @@ function Thinking() {
 }
 
 function Message({ message }) {
+  if (message.kind === 'verdict') return <Verdict grade={message.grade} />
+
   if (message.kind === 'tutor') {
     return (
       <div className="animate-rise max-w-[85%] rounded-2xl rounded-tl-sm bg-tutor px-4 py-2.5">
@@ -295,9 +349,10 @@ function Message({ message }) {
   )
 }
 
-function FeedbackPanel({ feedback, isLast, onContinue }) {
-  const ungraded = !feedback.graded
-  const right = feedback.was_correct
+/** The tutor's reaction, rendered as its own turn in the conversation. */
+function Verdict({ grade }) {
+  const ungraded = !grade.graded
+  const right = grade.was_correct
 
   const tone = ungraded
     ? 'bg-surface'
@@ -305,63 +360,43 @@ function FeedbackPanel({ feedback, isLast, onContinue }) {
       ? 'bg-success-soft'
       : 'bg-error-soft'
   const accent = ungraded ? 'text-muted' : right ? 'text-success' : 'text-error'
-  const button = ungraded ? 'bg-ink' : right ? 'bg-success' : 'bg-error'
 
   return (
-    <div className={`animate-rise -mx-5 -mb-5 mt-3 px-5 pt-4 pb-5 ${tone}`}>
-      <p className={`text-base font-bold ${accent}`}>
-        {ungraded ? 'Skipped' : right ? '¡Correcto!' : 'Not quite'}
+    <div
+      className={`animate-rise max-w-[90%] rounded-2xl rounded-tl-sm px-4 py-3 ${tone}`}
+    >
+      <p className={`text-sm font-extrabold ${accent}`}>
+        {ungraded ? 'Skipped' : right ? '¡Correcto!' : 'Casi'}
       </p>
 
       {/* corrected_es means two different things: for a typed answer it is
           that sentence fixed, for a tapped chip it is the option that was
           right - which can be a different sentence entirely. Labelling it
           stops it reading as a contradiction of the reason below. */}
-      {feedback.corrected_es && (
+      {grade.corrected_es && (
         <>
           <p className="mt-2 text-[11px] font-bold tracking-wide text-muted uppercase">
             Correct answer
           </p>
-          <p className="text-sm font-bold">{feedback.corrected_es}</p>
+          <p className="text-sm font-bold">{grade.corrected_es}</p>
         </>
       )}
-      {feedback.feedback_en && (
-        <p className="mt-1.5 text-xs text-muted">{feedback.feedback_en}</p>
+      {grade.feedback_en && (
+        <p className="mt-1.5 text-xs text-muted">{grade.feedback_en}</p>
       )}
-      {feedback.due_date && (
+      {grade.due_date && (
         <p className="mt-2 text-xs text-muted">
-          You&rsquo;ll see this word again {formatDue(feedback.due_date)}.
+          You&rsquo;ll see this word again {formatDue(grade.due_date)}.
         </p>
       )}
-
-      <button
-        type="button"
-        autoFocus
-        onClick={onContinue}
-        className={`btn-3d mt-4 min-h-12 w-full rounded-2xl px-4 py-3 text-sm
-                    font-extrabold tracking-wide text-white uppercase
-                    hover:brightness-110 ${button}`}
-      >
-        {isLast ? 'Finish lesson' : 'Continue'}
-      </button>
     </div>
   )
 }
 
-function Composer({
-  current,
-  disabled,
-  typing,
-  setTyping,
-  draft,
-  setDraft,
-  onChip,
-  onSend,
-  onEnd,
-}) {
+function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }) {
   if (typing) {
     return (
-      <div>
+      <div className="mb-1">
         <div className="flex gap-2">
           <input
             autoFocus
@@ -386,13 +421,6 @@ function Composer({
             Send
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setTyping(false)}
-          className="mt-1 inline-flex min-h-11 items-center text-xs text-muted underline"
-        >
-          Choose a reply instead
-        </button>
       </div>
     )
   }
@@ -417,26 +445,6 @@ function Composer({
         </button>
       ))}
 
-      {/* min-h-11 (44px) on both: they are small text links, but they still
-          have to be thumb-sized targets on a phone. */}
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setTyping(true)}
-          disabled={disabled}
-          className="inline-flex min-h-11 items-center pr-3 text-xs text-muted
-                     underline disabled:opacity-40"
-        >
-          Type your own instead
-        </button>
-        <button
-          type="button"
-          onClick={onEnd}
-          className="inline-flex min-h-11 items-center pl-3 text-xs text-muted underline"
-        >
-          End lesson
-        </button>
-      </div>
     </div>
   )
 }
