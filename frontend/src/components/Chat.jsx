@@ -178,9 +178,13 @@ export default function Chat({ topic }) {
 function Shell({ topic, progress, children }) {
   return (
     <div className="mx-auto flex min-h-full max-w-md flex-col px-5 py-6">
-      <header className="mb-5 flex items-baseline justify-between">
-        <Link to="/" className="text-sm text-muted hover:text-ink">
-          &larr; <span className="font-medium">{topic?.label ?? 'Practice'}</span>
+      <header className="mb-3 flex items-center justify-between">
+        <Link
+          to="/"
+          className="-ml-1 inline-flex min-h-11 items-center px-1 text-sm text-muted
+                     hover:text-ink"
+        >
+          &larr;&nbsp;<span className="font-medium">{topic?.label ?? 'Practice'}</span>
         </Link>
         {progress?.limit > 0 && (
           <span className="text-xs text-muted">
@@ -268,15 +272,17 @@ function Composer({
             onKeyDown={(event) => event.key === 'Enter' && onSend()}
             placeholder="Escribe tu respuesta…"
             disabled={disabled}
-            className="flex-1 rounded-lg border border-line px-3 py-2 text-sm
+            // text-base, not text-sm: iOS Safari zooms the whole page when a
+            // focused input is under 16px, which throws off the layout mid-demo.
+            className="min-h-11 flex-1 rounded-lg border border-line px-3 py-2 text-base
                        focus:border-learner focus:outline-none disabled:opacity-50"
           />
           <button
             type="button"
             onClick={onSend}
             disabled={disabled || !draft.trim()}
-            className="rounded-lg bg-learner px-4 py-2 text-sm font-medium text-white
-                       transition hover:opacity-90 disabled:opacity-40"
+            className="min-h-11 rounded-lg bg-learner px-4 py-2 text-sm font-medium
+                       text-white transition hover:opacity-90 disabled:opacity-40"
           >
             Send
           </button>
@@ -284,7 +290,7 @@ function Composer({
         <button
           type="button"
           onClick={() => setTyping(false)}
-          className="mt-2 text-xs text-muted underline"
+          className="mt-1 inline-flex min-h-11 items-center text-xs text-muted underline"
         >
           Choose a reply instead
         </button>
@@ -311,16 +317,23 @@ function Composer({
         </button>
       ))}
 
-      <div className="flex items-center justify-between pt-1">
+      {/* min-h-11 (44px) on both: they are small text links, but they still
+          have to be thumb-sized targets on a phone. */}
+      <div className="flex items-center justify-between">
         <button
           type="button"
           onClick={() => setTyping(true)}
           disabled={disabled}
-          className="text-xs text-muted underline disabled:opacity-40"
+          className="inline-flex min-h-11 items-center pr-3 text-xs text-muted
+                     underline disabled:opacity-40"
         >
           Type your own instead
         </button>
-        <button type="button" onClick={onEnd} className="text-xs text-muted underline">
+        <button
+          type="button"
+          onClick={onEnd}
+          className="inline-flex min-h-11 items-center pl-3 text-xs text-muted underline"
+        >
           End session
         </button>
       </div>
