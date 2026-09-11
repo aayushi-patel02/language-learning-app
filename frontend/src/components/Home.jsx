@@ -80,18 +80,27 @@ export default function Home() {
 }
 
 function TopicLoad({ load }) {
+  // Only the two counts a learner can act on. Words that are known but not
+  // yet due were shown as "scheduled", which reads as jargon and offers
+  // nothing to do about it.
+  if (load.total === 0) {
+    return <span className="mt-2 block text-xs text-muted">no vocabulary yet</span>
+  }
+
+  if (load.due === 0 && load.new === 0) {
+    return (
+      <span className="mt-2 block text-xs text-success">
+        All caught up &mdash; nothing due
+      </span>
+    )
+  }
+
   return (
     <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       {load.due > 0 && (
-        <span className="font-medium text-success">{load.due} due</span>
+        <span className="font-medium text-success">{load.due} to review</span>
       )}
       {load.new > 0 && <span className="text-muted">{load.new} new</span>}
-      {load.scheduled > 0 && (
-        <span className="text-muted">{load.scheduled} scheduled</span>
-      )}
-      {load.due === 0 && load.new === 0 && load.scheduled === 0 && (
-        <span className="text-muted">no vocabulary seeded</span>
-      )}
     </span>
   )
 }
