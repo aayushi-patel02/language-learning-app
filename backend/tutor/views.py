@@ -11,7 +11,7 @@ exist but not which is right, so a learner (or a judge poking at the network
 tab) cannot mark their own answer correct.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -24,7 +24,7 @@ from rest_framework.views import APIView
 
 # Imported as modules, not as bare names: `llm.get_next_turn` is looked up at
 # call time, so tests can patch it without the reference being frozen here.
-from . import llm, sm2
+from . import insights, llm, sm2
 from .models import (
     TOPIC_CHOICES,
     TOPIC_SLUGS,
@@ -305,6 +305,78 @@ class ProgressView(APIView):
                 'strong': sum(1 for s in topic_started if is_strong(s)),
             })
 
+        answered = list(
+            Turn.objects.filter(
+                session__user=user, answered_at__isnull=False
+            )
+            .select_related('session')
+            .only('answered_at', 'was_correct', 'feedback_en', 'session__started_at')
+        )
+
+        # --- streak -----------------------------------------------------
+        # Any answered turn counts as practice for that day. Walking back
+        # from today rather than from the most recent day of activity, so a
+        # streak that has already been broken reads as zero.
+        active_days = {turn.answered_at.date() for turn in answered}
+        streak = 0
+        cursor = today
+        if today not in active_days and (today - timedelta(days=1)) in active_days:
+            # Yesterday still counts: the streak is alive until today ends.
+            cursor = today - timedelta(days=1)
+        while cursor in active_days:
+            streak += 1
+            cursor -= timedelta(days=1)
+
+        # --- this week against last week --------------------------------
+        week_start = today - timedelta(days=6)
+        prev_start = today - timedelta(days=13)
+
+        def window(start, end):
+            return [t for t in answered if start <= t.answered_at.date() <= end]
+
+        this_week = window(week_start, today)
+        prev_week = window(prev_start, week_start - timedelta(days=1))
+
+        def accuracy_of(turns):
+            graded = [t for t in turns if t.was_correct is not None]
+            if not graded:
+                return None
+            return round(sum(1 for t in graded if t.was_correct) / len(graded), 3)
+
+        # Practice time is measured from when a session opened to its last
+        # answer, which is real elapsed time rather than a turn count guess.
+        by_session = {}
+        for turn in answered:
+            key = turn.session_id
+            current = by_session.get(key)
+            if current is None or turn.answered_at > current[1]:
+                by_session[key] = (turn.session.started_at, turn.answered_at)
+        practice_seconds = sum(
+            max(0, int((last - start).total_seconds()))
+            for start, last in by_session.values()
+            if last.date() >= week_start
+        )
+
+        # --- daily calendar ---------------------------------------------
+        per_day = {}
+        for turn in answered:
+            per_day[turn.answered_at.date()] = per_day.get(turn.answered_at.date(), 0) + 1
+        calendar = [
+            {
+                'date': (today - timedelta(days=offset)).isoformat(),
+                'answers': per_day.get(today - timedelta(days=offset), 0),
+            }
+            for offset in range(27, -1, -1)
+        ]
+
+        # --- hardest words ----------------------------------------------
+        # Lapses first: a word forgotten after being known is a sharper
+        # signal than one simply answered wrong on a first attempt.
+        hardest = sorted(
+            (s for s in started if s.lapses or (s.accuracy or 1) < 0.6),
+            key=lambda s: (-s.lapses, s.accuracy if s.accuracy is not None else 1),
+        )[:5]
+
         return Response({
             'vocabulary_total': VocabItem.objects.count(),
             'words_started': len(started),
@@ -318,6 +390,29 @@ class ProgressView(APIView):
             'lessons_completed': ConversationSession.objects.filter(
                 user=user, is_complete=True).count(),
             'topics': topics,
+
+            'streak_days': streak,
+            'practised_today': today in active_days,
+            'practice_seconds_this_week': practice_seconds,
+            'answers_this_week': len(this_week),
+            'accuracy_this_week': accuracy_of(this_week),
+            'accuracy_last_week': accuracy_of(prev_week),
+            'calendar': calendar,
+            'hardest_words': [
+                {
+                    'id': state.item_id,
+                    'spanish': state.item.spanish,
+                    'english': state.item.english,
+                    'lapses': state.lapses,
+                    'accuracy': round(state.accuracy, 2)
+                    if state.accuracy is not None else None,
+                }
+                for state in hardest
+            ],
+            'grammar': insights.grammar_breakdown(
+                [t.feedback_en for t in this_week if t.was_correct is False],
+                [t.feedback_en for t in prev_week if t.was_correct is False],
+            ),
         })
 
 
