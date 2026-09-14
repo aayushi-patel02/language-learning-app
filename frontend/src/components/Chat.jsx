@@ -394,11 +394,47 @@ function Verdict({ grade }) {
 }
 
 function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }) {
+  const inputRef = useRef(null)
+
+  /** Prefill up to the blank so the learner carries straight on typing. */
+  const useStarter = (starter) => {
+    // Everything before the first run of underscores. Stripping the blanks
+    // in place would leave the trailing punctuation stranded, e.g.
+    // "Quisiera ____." becoming "Quisiera ." instead of "Quisiera ".
+    const prefix = starter.split(/_+/)[0]
+    setDraft(prefix)
+    // Focus regardless: when the blank comes first the prefix is empty, and
+    // the tap should still put the learner in the field.
+    requestAnimationFrame(() => {
+      const input = inputRef.current
+      if (!input) return
+      input.focus()
+      input.setSelectionRange(prefix.length, prefix.length)
+    })
+  }
+
   if (typing) {
     return (
       <div className="mb-1">
+        {current?.sentence_starter && (
+          <button
+            type="button"
+            onClick={() => useStarter(current.sentence_starter)}
+            className="mb-2 w-full rounded-xl border border-line bg-white px-3 py-2
+                       text-left transition-colors hover:border-ink/20"
+          >
+            <span className="block text-[11px] font-bold tracking-wide text-muted
+                             uppercase">
+              Try starting with
+            </span>
+            <span className="mt-0.5 block text-sm font-semibold">
+              {current.sentence_starter}
+            </span>
+          </button>
+        )}
         <div className="flex gap-2">
           <input
+            ref={inputRef}
             autoFocus
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
