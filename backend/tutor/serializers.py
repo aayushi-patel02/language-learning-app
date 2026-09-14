@@ -23,6 +23,7 @@ class TurnSerializer(serializers.ModelSerializer):
             'ai_message',
             'ai_message_en',
             'reply_options',
+            'sentence_starter',
             'target_word',
         ]
 

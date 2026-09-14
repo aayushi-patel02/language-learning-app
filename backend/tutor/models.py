@@ -200,6 +200,10 @@ class Turn(models.Model):
     # List of {"es": ..., "en": ..., "is_correct": bool} dicts backing the
     # tappable reply chips. Empty when the turn is free-text only.
     suggested_replies = models.JSONField(default=list, blank=True)
+    # Scaffolding for the free-text answer: a frame with the hard part left
+    # blank, e.g. "Me gustaria ____, por favor." Shown only when the learner
+    # chooses to type, so it supports without doing the work for them.
+    sentence_starter = models.CharField(max_length=200, blank=True)
     # The vocab item this turn is drilling, if any.
     target_item = models.ForeignKey(
         VocabItem,

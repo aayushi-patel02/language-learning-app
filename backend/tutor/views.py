@@ -81,6 +81,7 @@ def _create_turn(session, index, planned_item, result):
         index=index,
         tutor_message_es=result['tutor_message_es'],
         tutor_message_en=result['tutor_message_en'],
+        sentence_starter=result.get('sentence_starter', ''),
         suggested_replies=result['replies'],
         target_item=_resolve_target(
             session.topic, result.get('target_word'), planned_item),
