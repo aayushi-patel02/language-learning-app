@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
+    'rest_framework.authtoken',
     'tutor',
 ]
 
@@ -207,6 +208,11 @@ if not DEBUG:
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        # Token first: the frontend and backend sit on different origins in
+        # production, where a session cookie would be a third-party cookie
+        # and Safari blocks those outright. Session auth stays for the
+        # browsable API during development.
+        'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
