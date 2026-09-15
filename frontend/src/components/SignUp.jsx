@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { signUp } from '../api'
 import { useAuth } from '../auth'
-import AuthShell, { Field, GoogleButton, SubmitButton } from './AuthShell'
+import AuthShell, { Field, SubmitButton } from './AuthShell'
 
 export default function SignUp() {
   const navigate = useNavigate()
@@ -46,10 +46,6 @@ export default function SignUp() {
           : 'It takes a moment and keeps your progress safe.'
       }
     >
-      <GoogleButton label="Sign up with Google" />
-
-      <Divider />
-
       <form onSubmit={submit} noValidate>
         <Field
           label="Name"
@@ -108,17 +104,5 @@ export default function SignUp() {
         </Link>
       </p>
     </AuthShell>
-  )
-}
-
-function Divider() {
-  return (
-    <div className="my-5 flex items-center gap-3">
-      <span className="h-px flex-1 bg-line" />
-      <span className="text-[11px] font-bold tracking-wide text-muted uppercase">
-        or
-      </span>
-      <span className="h-px flex-1 bg-line" />
-    </div>
   )
 }

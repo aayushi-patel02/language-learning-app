@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { logIn } from '../api'
 import { useAuth } from '../auth'
-import AuthShell, { Field, GoogleButton, SubmitButton } from './AuthShell'
+import AuthShell, { Field, SubmitButton } from './AuthShell'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -30,8 +30,6 @@ export default function Login() {
 
   return (
     <AuthShell title="Welcome back" subtitle="Pick up where you left off.">
-      <GoogleButton label="Continue with Google" />
-
       <form onSubmit={submit} noValidate>
         <Field
           label="Email"
