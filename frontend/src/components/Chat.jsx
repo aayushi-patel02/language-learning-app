@@ -397,7 +397,7 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
   const inputRef = useRef(null)
 
   /** Prefill up to the blank so the learner carries straight on typing. */
-  const useStarter = (starter) => {
+  const applyStarter = (starter) => {
     // Everything before the first run of underscores. Stripping the blanks
     // in place would leave the trailing punctuation stranded, e.g.
     // "Quisiera ____." becoming "Quisiera ." instead of "Quisiera ".
@@ -419,7 +419,7 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
         {current?.sentence_starter && (
           <button
             type="button"
-            onClick={() => useStarter(current.sentence_starter)}
+            onClick={() => applyStarter(current.sentence_starter)}
             className="mb-2 w-full rounded-xl border border-line bg-white px-3 py-2
                        text-left transition-colors hover:border-ink/20"
           >

@@ -8,6 +8,29 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// Read on every request rather than set once at startup: signing in or out
+// mid-session changes the token, and a captured copy would go stale.
+api.interceptors.request.use((config) => {
+  let token = null
+  try {
+    token = localStorage.getItem('charla.token')
+  } catch {
+    // Private browsing. Requests go out unauthenticated, which the backend
+    // answers as the demo learner rather than rejecting.
+  }
+  if (token) config.headers.Authorization = `Token ${token}`
+  return config
+})
+
+// --- accounts ---
+export const startGuest = () => api.post('/auth/guest/')
+export const signUp = (payload) => api.post('/auth/signup/', payload)
+export const logIn = (email, password) =>
+  api.post('/auth/login/', { email, password })
+export const getMe = () => api.get('/auth/me/')
+export const updateMe = (payload) => api.patch('/auth/me/', payload)
+export const deleteAccount = () => api.delete('/auth/me/')
+
 // Topic list with each one's review load, so the home screen can show what
 // is actually due rather than three inert links.
 export const getTopics = () => api.get('/topics/')
