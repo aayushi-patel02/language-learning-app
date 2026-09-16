@@ -94,10 +94,17 @@ The two wrong replies are the most important part, and there are strict rules:
 
 Return ONLY a JSON object. No prose, no markdown fences.
 
+Also give a SENTENCE STARTER: the shape of a correct answer with the part the
+learner has to supply replaced by ____ . It scaffolds someone typing their own
+answer, so leave out the word being tested, never the easy scaffolding around
+it. For "What time do you get up?" a good starter is "Me levanto a las ____."
+and a useless one is "____".
+
 {
   "tutor_message_es": "your line in Spanish",
   "tutor_message_en": "literal English translation",
   "target_word": "the Spanish vocabulary item this turn drills",
+  "sentence_starter": "a frame with ____ where the answer goes",
   "replies": [
     {"es": "...", "en": "...", "is_correct": true},
     {"es": "...", "en": "...", "is_correct": false, "why_wrong": "short reason in English"},
@@ -423,8 +430,25 @@ def _normalise_turn(payload):
         'tutor_message_es': spanish,
         'tutor_message_en': _clean_str(payload.get('tutor_message_en')),
         'target_word': _clean_str(payload.get('target_word')),
+        'sentence_starter': _normalise_starter(payload.get('sentence_starter')),
         'replies': _normalise_replies(payload.get('replies') or payload.get('reply_options')),
     }
+
+
+def _normalise_starter(value):
+    """A usable sentence frame, or nothing.
+
+    A starter is optional scaffolding, so anything malformed is dropped
+    rather than raised on: losing the hint is a far smaller cost than losing
+    the whole turn. It must contain a blank and some actual words, since a
+    bare "____" scaffolds nothing.
+    """
+    starter = _clean_str(value)
+    if not starter or '_' not in starter:
+        return ''
+    if len(starter.replace('_', '').strip()) < 4:
+        return ''
+    return starter[:200]
 
 
 def _normalise_evaluation(payload, fallback_turn):

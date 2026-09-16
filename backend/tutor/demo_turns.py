@@ -15,7 +15,60 @@ Rules these turns follow, matching what the live prompt asks the model for:
   an off-topic or incomplete answer.
 """
 
+import unicodedata
+
 from .models import DAILY_ROUTINE, ORDERING_FOOD, TRAVEL_BASICS
+
+
+# Scaffolding for a learner who chooses to type instead of tapping: the shape
+# of a correct answer with the tested part blanked out. Keyed on target word
+# rather than passed to every _turn() call, so the bank stays readable.
+# Keys are written unaccented purely so the lookup is forgiving. The values
+# are shown to the learner as a model of correct Spanish, in an app that marks
+# a dropped accent wrong, so they carry full accents and punctuation.
+STARTERS = {
+    # daily routine
+    'levantarse': 'Me levanto a las ____.',
+    'desayunar': 'Desayuno en ____.',
+    'ducharse': 'Me ducho ____ de desayunar.',
+    'vestirse': 'Sí, me visto muy ____.',
+    'el trabajo': 'Voy al trabajo en ____.',
+    'almorzar': 'Almuerzo a la ____.',
+    'cenar': 'Ceno con ____.',
+    'acostarse': 'Me acuesto a las ____.',
+    # ordering food
+    'la mesa': 'Una mesa para ____, por favor.',
+    'el menu': 'Sí, ¿me trae el ____, por favor?',
+    'la bebida': 'Un vaso de ____, por favor.',
+    'la ensalada': 'Sí, una ensalada ____.',
+    'el pollo': '____ con arroz, por favor.',
+    'picante': 'Sí, me gusta la comida ____.',
+    'el postre': 'Sí, un ____ de postre.',
+    'la cuenta': 'No, gracias. La ____, por favor.',
+    # travel basics
+    'el billete': 'Un billete a ____, por favor.',
+    'a que hora sale?': '¿A qué hora ____ el tren?',
+    'la estacion': '¿Dónde ____ la estación?',
+    'cerca': '¿Está ____ del hotel?',
+    'a la derecha': 'Gracias. ¿Y luego a la ____?',
+    'el hotel': 'Sí, mi hotel ____ en el centro.',
+    'la habitacion': 'Sí, reservé una ____ doble.',
+    'la ayuda': 'No, gracias. Ha sido de mucha ____.',
+}
+
+def _starter_for(target):
+    """Look up a starter ignoring accents and inverted punctuation.
+
+    The keys above are written unaccented so they are easy to type and hard to
+    get subtly wrong; the bank's target words are properly accented.
+    """
+    decomposed = unicodedata.normalize('NFD', target)
+    flattened = ''.join(
+        char for char in decomposed if unicodedata.category(char) != 'Mn'
+    )
+    return STARTERS.get(
+        flattened.replace('¿', '').replace('¡', '').lower().strip(), ''
+    )
 
 
 def _turn(target, es, en, replies):
@@ -24,6 +77,7 @@ def _turn(target, es, en, replies):
         'target_word': target,
         'tutor_message_es': es,
         'tutor_message_en': en,
+        'sentence_starter': _starter_for(target),
         'replies': [
             {
                 'id': index,

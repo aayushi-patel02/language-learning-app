@@ -1,5 +1,12 @@
 from django.urls import path
 
+from .auth_views import (
+    GuestView,
+    LoginView,
+    LogoutView,
+    MeView,
+    SignUpView,
+)
 from .views import (
     NextTurnView,
     ProgressView,
@@ -11,6 +18,14 @@ from .views import (
 )
 
 urlpatterns = [
+    # Accounts
+    path('auth/guest/', GuestView.as_view(), name='auth-guest'),
+    path('auth/signup/', SignUpView.as_view(), name='auth-signup'),
+    path('auth/login/', LoginView.as_view(), name='auth-login'),
+    path('auth/logout/', LogoutView.as_view(), name='auth-logout'),
+    path('auth/me/', MeView.as_view(), name='auth-me'),
+
+    # Learning
     path('topics/', TopicListView.as_view(), name='topic-list'),
     path('progress/', ProgressView.as_view(), name='progress'),
     path('vocabulary/', VocabularyListView.as_view(), name='vocabulary-list'),

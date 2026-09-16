@@ -38,17 +38,28 @@ GOOD_EVAL = {
 }
 
 
+def _all_providers(call):
+    """Register the stub under every real provider name.
+
+    Keyed off llm.PROVIDERS rather than a hardcoded list, so adding a
+    provider cannot silently leave these helpers behind: an unregistered
+    name makes active_provider fall back and the test looks like a
+    behaviour failure rather than a missing stub.
+    """
+    return {name: call for name in llm.PROVIDERS}
+
+
 def stub(response_text):
     """Patch every provider to return a fixed raw string."""
     def _call(system_prompt, user_content):
         return response_text
-    return mock.patch.object(llm, 'PROVIDERS', {'deepseek': _call, 'sarvam': _call})
+    return mock.patch.object(llm, 'PROVIDERS', _all_providers(_call))
 
 
 def raising_stub(exc):
     def _call(system_prompt, user_content):
         raise exc
-    return mock.patch.object(llm, 'PROVIDERS', {'deepseek': _call, 'sarvam': _call})
+    return mock.patch.object(llm, 'PROVIDERS', _all_providers(_call))
 
 
 class ExtractJsonTests(TestCase):
@@ -476,6 +487,50 @@ class GeminiTransportTests(TestCase):
             turn = llm.get_next_turn(DAILY_ROUTINE)
         self.assertEqual(turn['provider'], 'fallback')
         self.assertTrue(turn['tutor_message_es'])
+
+
+class SentenceStarterTests(TestCase):
+    """Scaffolding is optional, so anything unusable is dropped, not raised on."""
+
+    def test_a_well_formed_starter_is_kept(self):
+        self.assertEqual(
+            llm._normalise_starter('Me levanto a las ____.'),
+            'Me levanto a las ____.',
+        )
+
+    def test_a_starter_without_a_blank_is_dropped(self):
+        # With nothing left out it is just the answer.
+        self.assertEqual(llm._normalise_starter('Me levanto a las siete.'), '')
+
+    def test_a_bare_blank_is_dropped(self):
+        # "____" scaffolds nothing at all.
+        for useless in ('____', '_', '  ___  ', '____.'):
+            with self.subTest(starter=useless):
+                self.assertEqual(llm._normalise_starter(useless), '')
+
+    def test_missing_or_non_string_values_are_dropped(self):
+        for bad in (None, '', '   ', 123):
+            with self.subTest(value=bad):
+                self.assertEqual(llm._normalise_starter(bad), '')
+
+    def test_an_overlong_starter_is_truncated_not_rejected(self):
+        self.assertEqual(len(llm._normalise_starter('a' * 400 + ' ____')), 200)
+
+    @override_settings(DEMO_MODE=False, LLM_PROVIDER='groq')
+    def test_a_turn_survives_an_unusable_starter(self):
+        payload = dict(GOOD_TURN, sentence_starter='____')
+        with stub(json.dumps(payload)):
+            turn = llm.get_next_turn(DAILY_ROUTINE)
+        self.assertEqual(turn['provider'], 'groq', 'must not fall back')
+        self.assertEqual(turn['sentence_starter'], '')
+
+    def test_every_demo_turn_has_a_usable_starter(self):
+        for topic, bank in llm.FALLBACK_TURNS.items():
+            for index, turn in enumerate(bank):
+                with self.subTest(topic=topic, index=index):
+                    starter = turn['sentence_starter']
+                    self.assertTrue(starter, 'demo mode should never lack one')
+                    self.assertEqual(llm._normalise_starter(starter), starter)
 
 
 class OpenAiCompatibleTransportTests(TestCase):

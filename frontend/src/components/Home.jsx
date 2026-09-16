@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { getTopics } from '../api'
+import { useAuth } from '../auth'
 import { TOPICS } from '../topics'
 import TopicIcon from './TopicIcon'
 
 export default function Home() {
+  const { user } = useAuth()
   // Null until the request lands, so the cards can render immediately and the
   // counts fill in. Avoids a spinner on the very first screen.
   const [loads, setLoads] = useState(null)
@@ -28,25 +30,35 @@ export default function Home() {
             Practise Spanish in conversation. What you get wrong comes back sooner.
           </p>
         </div>
-        <div className="flex shrink-0 flex-col gap-1.5">
-          <Link
-            to="/vocabulary"
-            className="inline-flex min-h-11 items-center justify-center rounded-full
-                       border border-line bg-white px-3 text-xs font-bold
-                       transition-colors hover:border-ink/20"
-          >
-            Words
-          </Link>
-          <Link
-            to="/progress"
-            className="inline-flex min-h-11 items-center justify-center rounded-full
-                       border border-line bg-white px-3 text-xs font-bold
-                       transition-colors hover:border-ink/20"
-          >
-            Progress
-          </Link>
-        </div>
+        <Link
+          to="/profile"
+          aria-label="Your profile"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+                     border border-line bg-white text-2xl transition-colors
+                     hover:border-ink/20"
+        >
+          {user?.avatar ?? '🦉'}
+        </Link>
       </header>
+
+      <nav className="mt-4 flex gap-2">
+        <Link
+          to="/vocabulary"
+          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full
+                     border border-line bg-white px-3 text-xs font-bold
+                     transition-colors hover:border-ink/20"
+        >
+          Words
+        </Link>
+        <Link
+          to="/progress"
+          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full
+                     border border-line bg-white px-3 text-xs font-bold
+                     transition-colors hover:border-ink/20"
+        >
+          Progress
+        </Link>
+      </nav>
 
       {loads !== null && (
         <div

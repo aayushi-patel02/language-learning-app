@@ -22,6 +22,39 @@ def default_turn_limit():
     return settings.SESSION_TURN_LIMIT
 
 
+class Profile(models.Model):
+    """Everything about a learner that is not authentication.
+
+    `is_guest` is the important flag. A guest is a real User row with an
+    unusable password, so all their practice is recorded normally; signing up
+    converts that same row into a full account rather than copying anything
+    across. Progress therefore follows them with no migration step, which
+    matters because the alternative punishes someone for trying the app
+    before committing to it.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    is_guest = models.BooleanField(default=False)
+
+    display_name = models.CharField(max_length=80, blank=True)
+    # An emoji rather than an uploaded image: no storage, no upload handling,
+    # no moderation, and it renders identically everywhere.
+    avatar = models.CharField(max_length=8, default='🦉')
+
+    native_language = models.CharField(max_length=40, default='English')
+    learning_language = models.CharField(max_length=40, default='Spanish')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        kind = 'guest' if self.is_guest else 'account'
+        return f'{self.user.username} ({kind})'
+
+    @property
+    def name(self):
+        return self.display_name or self.user.first_name or self.user.username
+
+
 class VocabItem(models.Model):
     """One Spanish word or phrase the tutor can drill, scoped to a topic."""
 
@@ -200,6 +233,10 @@ class Turn(models.Model):
     # List of {"es": ..., "en": ..., "is_correct": bool} dicts backing the
     # tappable reply chips. Empty when the turn is free-text only.
     suggested_replies = models.JSONField(default=list, blank=True)
+    # Scaffolding for the free-text answer: a frame with the hard part left
+    # blank, e.g. "Me gustaria ____, por favor." Shown only when the learner
+    # chooses to type, so it supports without doing the work for them.
+    sentence_starter = models.CharField(max_length=200, blank=True)
     # The vocab item this turn is drilling, if any.
     target_item = models.ForeignKey(
         VocabItem,

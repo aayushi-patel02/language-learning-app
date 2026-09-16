@@ -2,8 +2,8 @@
 
 Three endpoints: start a session, answer a turn, read the recap.
 
-There is no signup flow - every request runs against the seeded demo learner.
-That is a deliberate scope decision, not an oversight.
+Requests carry a token identifying a guest or a full account; without one they
+fall back to the seeded demo learner.
 
 The rule that matters most here: **chip grading reads `is_correct` from the
 stored turn, never from the request body.** The browser is told which options
@@ -37,7 +37,7 @@ from .serializers import TurnSerializer
 
 
 def get_demo_user():
-    """The single seeded learner. See the module docstring."""
+    """The seeded fallback learner, used when a request carries no token."""
     user, created = User.objects.get_or_create(
         username=settings.DEMO_USERNAME,
         defaults={'first_name': 'Demo', 'last_name': 'Learner'},
@@ -47,6 +47,19 @@ def get_demo_user():
         user.set_unusable_password()
         user.save(update_fields=['password'])
     return user
+
+
+def current_learner(request):
+    """Whose progress this request is about.
+
+    A token identifies a guest or a full account, and either owns its own
+    schedule. Without one the seeded demo learner answers, which keeps the
+    browsable API and curl usable and means the app still runs for anyone who
+    has not signed in.
+    """
+    if request.user.is_authenticated:
+        return request.user
+    return get_demo_user()
 
 
 def _history(session):
@@ -81,6 +94,7 @@ def _create_turn(session, index, planned_item, result):
         index=index,
         tutor_message_es=result['tutor_message_es'],
         tutor_message_en=result['tutor_message_en'],
+        sentence_starter=result.get('sentence_starter', ''),
         suggested_replies=result['replies'],
         target_item=_resolve_target(
             session.topic, result.get('target_word'), planned_item),
@@ -108,7 +122,7 @@ class TopicListView(APIView):
     """
 
     def get(self, request):
-        user = get_demo_user()
+        user = current_learner(request)
         today = timezone.localdate()
 
         states = {
@@ -174,7 +188,7 @@ class VocabularyListView(APIView):
     """
 
     def get(self, request):
-        user = get_demo_user()
+        user = current_learner(request)
         states = sm2.ensure_states(user).select_related('item')
 
         shelves = {'due': [], 'learning': [], 'mastered': [], 'new': []}
@@ -227,14 +241,14 @@ class VocabularyListView(APIView):
 class WordDetailView(APIView):
     """GET /api/vocabulary/<id>/ and POST to toggle the bookmark."""
 
-    def get_state(self, item_id):
-        user = get_demo_user()
+    def get_state(self, request, item_id):
+        user = current_learner(request)
         item = get_object_or_404(VocabItem, pk=item_id)
         state, _ = UserVocabState.objects.get_or_create(user=user, item=item)
         return user, item, state
 
     def get(self, request, item_id):
-        user, item, state = self.get_state(item_id)
+        user, item, state = self.get_state(request, item_id)
 
         # Where the learner has actually met this word, newest first, so the
         # detail screen can show it in the context it was practised in.
@@ -260,7 +274,7 @@ class WordDetailView(APIView):
         return Response(payload)
 
     def post(self, request, item_id):
-        _user, item, state = self.get_state(item_id)
+        _user, item, state = self.get_state(request, item_id)
         state.is_saved = bool(request.data.get('is_saved', not state.is_saved))
         state.save(update_fields=['is_saved'])
         return Response({'id': item.pk, 'is_saved': state.is_saved})
@@ -276,7 +290,7 @@ class ProgressView(APIView):
     """
 
     def get(self, request):
-        user = get_demo_user()
+        user = current_learner(request)
         today = timezone.localdate()
 
         states = list(
@@ -427,7 +441,7 @@ class StartSessionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        user = get_demo_user()
+        user = current_learner(request)
         turn_limit = settings.SESSION_TURN_LIMIT
         if settings.DEMO_MODE:
             # The canned bank wraps, so a longer session would replay the same
@@ -480,7 +494,7 @@ class NextTurnView(APIView):
     """
 
     def post(self, request, session_id):
-        user = get_demo_user()
+        user = current_learner(request)
         session = get_object_or_404(ConversationSession, pk=session_id, user=user)
 
         if session.is_complete:
@@ -633,7 +647,7 @@ class SessionRecapView(APIView):
     """GET /api/sessions/<id>/recap/ - what was practised and when it's next due."""
 
     def get(self, request, session_id):
-        user = get_demo_user()
+        user = current_learner(request)
         session = get_object_or_404(ConversationSession, pk=session_id, user=user)
 
         answered = list(
