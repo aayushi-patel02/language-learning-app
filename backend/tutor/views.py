@@ -343,10 +343,16 @@ class ProgressView(APIView):
 
     def get(self, request):
         user = current_learner(request)
+        language = learner_language(user)
         today = timezone.localdate()
 
+        # Scoped to the language being studied, like the home screen and the
+        # library. Unscoped, the by-topic totals counted all four languages'
+        # vocabulary, so a topic of twenty words reported progress out of
+        # eighty, and a streak built in Spanish showed up under Hindi.
         states = list(
-            UserVocabState.objects.filter(user=user).select_related('item')
+            UserVocabState.objects.filter(user=user, item__language=language)
+            .select_related('item')
         )
         # A row exists as soon as the scheduler looks at a word, so "started"
         # has to mean actually answered at least once.
@@ -361,7 +367,8 @@ class ProgressView(APIView):
 
         topics = []
         for slug, label in TOPIC_CHOICES:
-            topic_total = VocabItem.objects.filter(topic=slug).count()
+            topic_total = VocabItem.objects.filter(
+                language=language, topic=slug).count()
             topic_started = [s for s in started if s.item.topic == slug]
             topics.append({
                 'id': slug,
@@ -373,7 +380,8 @@ class ProgressView(APIView):
 
         answered = list(
             Turn.objects.filter(
-                session__user=user, answered_at__isnull=False
+                session__user=user, session__language=language,
+                answered_at__isnull=False,
             )
             .select_related('session')
             .only('answered_at', 'was_correct', 'feedback_en', 'session__started_at')
