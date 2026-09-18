@@ -95,7 +95,7 @@ export default function Profile() {
           </p>
           <Link
             to="/signup"
-            className="btn-3d mt-3 flex min-h-11 items-center justify-center rounded-xl
+            className="btn mt-3 flex min-h-11 items-center justify-center rounded-xl
                        bg-topic-morning px-4 py-2 text-xs font-extrabold tracking-wide
                        text-white uppercase hover:brightness-110"
           >
@@ -171,7 +171,7 @@ export default function Profile() {
         </span>
       </p>
 
-      {saved && <p className="mt-4 text-xs text-success">Saved.</p>}
+      {saved && <p className="mt-4 text-xs text-learner">Saved.</p>}
 
       {/* Neither action means anything for a guest, and both are traps: there
           are no credentials to log back in with, so either one silently
@@ -185,9 +185,9 @@ export default function Profile() {
             await signOut()
             navigate('/welcome', { replace: true })
           }}
-          className="btn-3d flex min-h-12 w-full items-center justify-center rounded-2xl
+          className="btn flex min-h-12 w-full items-center justify-center rounded-2xl
                      border border-line bg-white px-4 py-3 text-sm font-extrabold
-                     tracking-wide uppercase hover:bg-surface"
+                     tracking-wide uppercase transition-colors hover:border-learner"
         >
           Log out
         </button>
@@ -203,7 +203,7 @@ export default function Profile() {
               <button
                 type="button"
                 onClick={remove}
-                className="btn-3d min-h-11 flex-1 rounded-xl bg-error px-3 py-2 text-xs
+                className="btn min-h-11 flex-1 rounded-xl bg-error px-3 py-2 text-xs
                            font-extrabold tracking-wide text-white uppercase
                            hover:brightness-110"
               >
@@ -212,9 +212,9 @@ export default function Profile() {
               <button
                 type="button"
                 onClick={() => setConfirmingDelete(false)}
-                className="btn-3d min-h-11 flex-1 rounded-xl border border-line
+                className="btn min-h-11 flex-1 rounded-xl border border-line
                            bg-white px-3 py-2 text-xs font-extrabold tracking-wide
-                           uppercase"
+                           uppercase transition-colors hover:border-learner"
               >
                 Keep it
               </button>

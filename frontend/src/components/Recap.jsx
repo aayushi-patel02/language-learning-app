@@ -42,7 +42,7 @@ export default function Recap() {
         <div
           aria-hidden="true"
           className="mx-auto flex h-16 w-16 items-center justify-center rounded-full
-                     bg-success-soft text-3xl text-success"
+                     bg-learner-soft text-3xl text-learner"
         >
           ✓
         </div>
@@ -115,17 +115,17 @@ export default function Recap() {
       <div className="mt-8 space-y-2 pb-4">
         <Link
           to={`/chat/${data.topic}`}
-          className="btn-3d flex min-h-12 items-center justify-center rounded-2xl
-                     bg-success px-4 py-3 text-sm font-extrabold tracking-wide
+          className="btn flex min-h-12 items-center justify-center rounded-2xl
+                     bg-learner px-4 py-3 text-sm font-extrabold tracking-wide
                      text-white uppercase hover:brightness-110"
         >
           Next lesson
         </Link>
         <Link
           to="/"
-          className="btn-3d flex min-h-12 items-center justify-center rounded-2xl
+          className="btn flex min-h-12 items-center justify-center rounded-2xl
                      border border-line bg-white px-4 py-3 text-sm font-extrabold
-                     tracking-wide uppercase hover:bg-surface"
+                     tracking-wide uppercase transition-colors hover:border-learner"
         >
           Back to topics
         </Link>

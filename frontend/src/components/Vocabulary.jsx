@@ -9,9 +9,9 @@ import Chevron from './Chevron'
 // Shelves are mutually exclusive so the tabs partition the collection.
 // Saved and recent are cross-cuts over the same words, kept at the end.
 const TABS = [
-  { id: 'due', label: 'To review', tone: 'text-success' },
+  { id: 'due', label: 'To review', tone: 'text-learner' },
   { id: 'learning', label: 'Learning' },
-  { id: 'mastered', label: 'Mastered', tone: 'text-success' },
+  { id: 'mastered', label: 'Mastered', tone: 'text-learner' },
   { id: 'new', label: 'Not started' },
   { id: 'saved', label: 'Saved' },
   { id: 'recent', label: 'Recent' },

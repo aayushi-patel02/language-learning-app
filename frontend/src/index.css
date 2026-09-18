@@ -17,6 +17,7 @@
   --color-tutor: #f1eff9;
   --color-learner: #5b4bdb;
   --color-learner-deep: #4436bd;
+  --color-learner-soft: #eeebfb;
 
   --color-success: #16a34a;
   --color-success-soft: #eefbf2;
@@ -75,23 +76,15 @@
   }
 }
 
-/* Chunky buttons that depress when tapped. The bottom border is the "side"
-   of the key, so pressing it feels physical instead of flat. */
-.btn-3d {
-  /* border-bottom-style is set explicitly: the solid-colour buttons have no
-     border at all, so a width on its own would render nothing. */
-  border-bottom-style: solid;
-  border-bottom-width: 4px;
-  border-bottom-color: rgb(29 27 36 / 0.16);
-  transition:
-    transform 0.06s ease-out,
-    border-bottom-width 0.06s ease-out,
-    filter 0.15s ease-out;
+/* Flat buttons. These used to carry a 4px bottom border as the "side" of a
+   key, which read as an extra border in an app that otherwise draws one
+   weight everywhere. Pressing now dims rather than depresses. */
+.btn {
+  transition: filter 0.12s ease-out;
 }
 
-.btn-3d:active:not(:disabled) {
-  transform: translateY(2px);
-  border-bottom-width: 2px;
+.btn:active:not(:disabled) {
+  filter: brightness(0.94);
 }
 
 html,

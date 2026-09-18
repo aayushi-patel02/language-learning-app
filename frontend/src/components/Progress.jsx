@@ -66,7 +66,7 @@ function Body({ data }) {
         </p>
         <Link
           to="/"
-          className="btn-3d mt-5 inline-flex min-h-12 items-center justify-center
+          className="btn mt-5 inline-flex min-h-12 items-center justify-center
                      rounded-2xl bg-learner px-5 py-3 text-sm font-extrabold
                      tracking-wide text-white uppercase hover:brightness-110"
         >
@@ -93,7 +93,7 @@ function Body({ data }) {
         <Stat
           value={thisWeek === null ? 'n/a' : `${thisWeek}%`}
           label="Accuracy"
-          tone={change !== null && change > 0 ? 'text-success' : ''}
+          tone={change !== null && change > 0 ? 'text-learner' : ''}
         />
       </div>
       {change !== null && (
@@ -117,7 +117,7 @@ function Body({ data }) {
           suffix={`of ${data.vocabulary_total}`}
           label="Words started"
         />
-        <Stat value={data.words_strong} label="Known well" tone="text-success" />
+        <Stat value={data.words_strong} label="Known well" tone="text-learner" />
         <Stat
           value={percent(data.accuracy) === null ? 'n/a' : `${percent(data.accuracy)}%`}
           label="Accuracy"
@@ -210,9 +210,9 @@ function Body({ data }) {
 
       <Link
         to="/vocabulary"
-        className="btn-3d mt-8 flex min-h-12 items-center justify-center rounded-2xl
+        className="btn mt-8 flex min-h-12 items-center justify-center rounded-2xl
                    border border-line bg-white px-4 py-3 text-sm font-extrabold
-                   tracking-wide uppercase hover:bg-surface"
+                   tracking-wide uppercase transition-colors hover:border-learner"
       >
         Browse all words
       </Link>
@@ -255,9 +255,9 @@ function Calendar({ days }) {
   // reading is "did I practise", not "how many answers exactly".
   const level = (answers) => {
     if (!answers) return 'bg-line'
-    if (answers < 5) return 'bg-success/30'
-    if (answers < 12) return 'bg-success/60'
-    return 'bg-success'
+    if (answers < 5) return 'bg-learner/30'
+    if (answers < 12) return 'bg-learner/60'
+    return 'bg-learner'
   }
 
   return (
@@ -280,7 +280,7 @@ function Calendar({ days }) {
 
 function Trend({ trend }) {
   const style = {
-    improving: 'bg-success-soft text-success',
+    improving: 'bg-learner-soft text-learner',
     'needs work': 'bg-error-soft text-error',
     steady: 'bg-surface text-muted',
     watching: 'bg-surface text-muted',
@@ -337,7 +337,7 @@ function TopicRow({ topic }) {
           style={{ width: `${started}%` }}
         />
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-success"
+          className="absolute inset-y-0 left-0 rounded-full bg-learner"
           style={{ width: `${strong}%` }}
         />
       </div>

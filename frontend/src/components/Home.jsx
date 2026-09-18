@@ -44,7 +44,7 @@ export default function Home() {
               to="/login"
               className="inline-flex min-h-11 items-center rounded-full border
                          border-line bg-white px-3.5 text-xs font-bold
-                         transition-colors hover:border-ink/20"
+                         transition-colors hover:border-learner"
             >
               Log in
             </Link>
@@ -68,15 +68,15 @@ export default function Home() {
       {loads !== null && (
         <div
           className={`mt-6 rounded-2xl px-4 py-3.5 ${
-            totalDue > 0 ? 'bg-success-soft' : 'bg-surface'
+            totalDue > 0 ? 'bg-learner-soft' : 'bg-surface'
           }`}
         >
           {totalDue > 0 ? (
             <p className="text-sm">
-              <span className="text-base font-extrabold text-success">
+              <span className="text-base font-extrabold text-learner">
                 {totalDue}
               </span>
-              <span className="font-semibold text-success"> words</span>
+              <span className="font-semibold text-learner"> words</span>
               <span className="text-muted"> ready to review today</span>
             </p>
           ) : (
@@ -110,10 +110,7 @@ export default function Home() {
               <TopicLoad load={loadFor(topic.id)} accent={topic.accent} />
             </span>
 
-            <span
-              className="shrink-0 text-muted transition group-hover:translate-x-0.5
-                         group-hover:text-ink"
-            >
+            <span className="shrink-0 text-muted transition-colors group-hover:text-ink">
               <Chevron className="h-5 w-5" />
             </span>
           </Link>
@@ -140,7 +137,7 @@ function TopicLoad({ load, accent }) {
 
   if (load.due === 0 && load.new === 0) {
     return (
-      <span className="mt-1.5 block text-xs font-semibold text-success">
+      <span className="mt-1.5 block text-xs font-semibold text-learner">
         All caught up
       </span>
     )

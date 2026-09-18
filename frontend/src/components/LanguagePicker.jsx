@@ -76,7 +76,7 @@ export default function LanguagePicker() {
         aria-haspopup="listbox"
         className="inline-flex min-h-11 items-center gap-2 rounded-full border
                    border-line bg-white py-1.5 pr-3 pl-3.5 transition-colors
-                   hover:border-ink/20 disabled:opacity-60"
+                   hover:border-learner disabled:opacity-60"
       >
         <span className="text-[11px] font-bold tracking-wide text-muted uppercase">
           Learning

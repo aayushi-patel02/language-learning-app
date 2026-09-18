@@ -181,15 +181,13 @@ export default function Chat({ topic }) {
           type="button"
           autoFocus
           onClick={advance}
-          className={`btn-3d min-h-12 w-full rounded-2xl px-4 py-3 text-sm
-                      font-extrabold tracking-wide text-white uppercase
-                      hover:brightness-110 ${
-                        !feedback.graded
-                          ? 'bg-ink'
-                          : feedback.was_correct
-                            ? 'bg-success'
-                            : 'bg-error'
-                      }`}
+          // One colour whatever the verdict was. The bubble directly above
+          // already says whether the answer was right; recolouring the way
+          // forward as well made the primary action change under the
+          // learner turn by turn for no added information.
+          className="btn min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
+                     font-extrabold tracking-wide text-white uppercase
+                     hover:brightness-110"
         >
           {pending ? 'Continue' : 'Finish lesson'}
         </button>
@@ -199,7 +197,7 @@ export default function Chat({ topic }) {
         <button
           type="button"
           onClick={() => navigate(`/recap/${sessionId}`)}
-          className="btn-3d min-h-12 w-full rounded-2xl bg-ink px-4 py-3 text-sm
+          className="btn min-h-12 w-full rounded-2xl bg-ink px-4 py-3 text-sm
                      font-extrabold tracking-wide text-white uppercase
                      hover:brightness-125"
         >
@@ -288,7 +286,7 @@ function Shell({ topic, progress, children }) {
             className="h-3 flex-1 overflow-hidden rounded-full bg-line"
           >
             <div
-              className="h-full rounded-full bg-success transition-[width] duration-500
+              className="h-full rounded-full bg-learner transition-[width] duration-500
                          ease-out"
               style={{ width: `${percent}%` }}
             />
@@ -460,7 +458,7 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
             type="button"
             onClick={onSend}
             disabled={disabled || !draft.trim()}
-            className="btn-3d min-h-11 rounded-xl bg-learner px-4 py-2 text-sm
+            className="btn min-h-11 rounded-xl bg-learner px-4 py-2 text-sm
                        font-bold text-white hover:brightness-110
                        disabled:opacity-40"
           >
@@ -479,8 +477,8 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
           type="button"
           onClick={() => onChip(option)}
           disabled={disabled}
-          className="btn-3d w-full rounded-2xl border border-line bg-white px-4 py-3
-                     text-left hover:border-learner/40 hover:bg-surface
+          className="btn w-full rounded-2xl border border-line bg-white px-4 py-3
+                     text-left transition-colors hover:border-learner
                      disabled:opacity-40 focus:outline-none focus-visible:ring-2
                      focus-visible:ring-learner"
         >

@@ -77,7 +77,7 @@ export default function WordDetail() {
             type="button"
             aria-label={`Hear ${word.term}`}
             onClick={() => speak(word.term, word.language)}
-            className="btn-3d inline-flex min-h-12 min-w-12 shrink-0 items-center
+            className="btn inline-flex min-h-12 min-w-12 shrink-0 items-center
                        justify-center rounded-2xl bg-learner text-white
                        hover:brightness-110"
           >
@@ -117,7 +117,7 @@ export default function WordDetail() {
         <Fact
           value={SHELF_LABEL[word.shelf] ?? word.shelf}
           label="Mastery level"
-          tone={word.shelf === 'mastered' ? 'text-success' : ''}
+          tone={word.shelf === 'mastered' ? 'text-learner' : ''}
         />
         <Fact
           value={word.due_date ? formatDue(word.due_date) : 'not scheduled'}
@@ -208,7 +208,7 @@ export default function WordDetail() {
           never get to the word they just asked for. */}
       <Link
         to={`/chat/${word.topic}?word=${word.id}`}
-        className="btn-3d mt-8 flex min-h-12 items-center justify-center rounded-2xl
+        className="btn mt-8 flex min-h-12 items-center justify-center rounded-2xl
                    bg-learner px-4 py-3 text-sm font-extrabold tracking-wide
                    text-white uppercase hover:brightness-110"
       >
@@ -240,7 +240,7 @@ function Shell({ onBack, saved, onSave, children }) {
                         px-3 text-xs font-bold transition-colors ${
                           saved
                             ? 'border-learner bg-learner text-white'
-                            : 'border-line bg-white text-muted hover:border-ink/20'
+                            : 'border-line bg-white text-muted hover:border-learner'
                         }`}
           >
             <BookmarkIcon filled={saved} />

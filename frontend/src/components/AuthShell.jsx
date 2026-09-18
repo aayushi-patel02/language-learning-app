@@ -55,7 +55,7 @@ export function SubmitButton({ busy, children }) {
     <button
       type="submit"
       disabled={busy}
-      className="btn-3d mt-5 min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
+      className="btn mt-5 min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
                  font-extrabold tracking-wide text-white uppercase
                  hover:brightness-110 disabled:opacity-60"
     >

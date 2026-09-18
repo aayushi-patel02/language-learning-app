@@ -72,7 +72,7 @@ export default function Welcome({ onDone }) {
       <button
         type="button"
         onClick={() => (isLast ? onDone() : setStep(step + 1))}
-        className="btn-3d min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
+        className="btn min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
                    font-extrabold tracking-wide text-white uppercase
                    hover:brightness-110"
       >

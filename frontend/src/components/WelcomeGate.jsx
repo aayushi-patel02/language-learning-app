@@ -50,7 +50,7 @@ export default function WelcomeGate() {
         <button
           type="button"
           onClick={() => navigate('/signup')}
-          className="btn-3d min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
+          className="btn min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
                      font-extrabold tracking-wide text-white uppercase
                      hover:brightness-110"
         >
@@ -59,9 +59,9 @@ export default function WelcomeGate() {
         <button
           type="button"
           onClick={() => navigate('/login')}
-          className="btn-3d min-h-12 w-full rounded-2xl border border-line bg-white
+          className="btn min-h-12 w-full rounded-2xl border border-line bg-white
                      px-4 py-3 text-sm font-extrabold tracking-wide uppercase
-                     hover:bg-surface"
+                     transition-colors hover:border-learner"
         >
           I already have an account
         </button>
