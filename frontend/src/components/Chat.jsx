@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { sendChip, sendFreetext, startSession } from '../api'
 import { formatDue } from '../dates'
@@ -38,12 +38,17 @@ export default function Chat({ topic }) {
   // page load would open two sessions and burn two LLM calls.
   const startedFor = useRef(null)
 
+  // Set when the learner arrived from a word's own page, asking for that
+  // word specifically.
+  const [searchParams] = useSearchParams()
+  const focusWordId = searchParams.get('word')
+
   useEffect(() => {
     if (startedFor.current === topic) return
     startedFor.current = topic
 
     setStatus('loading')
-    startSession(topic)
+    startSession(topic, focusWordId)
       .then(({ data }) => {
         setSessionId(data.session_id)
         setProgress({ answered: 0, limit: data.turn_limit })

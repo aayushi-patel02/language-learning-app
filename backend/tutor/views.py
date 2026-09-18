@@ -495,6 +495,21 @@ class StartSessionView(APIView):
 
         user = current_learner(request)
         language = learner_language(user)
+
+        # Optional: the word the learner asked for by name, from its detail
+        # screen. Scoped to this topic and language so a stale or hand-typed
+        # id cannot smuggle a word from elsewhere into the plan.
+        first_item = None
+        word_id = request.data.get('word_id')
+        if word_id not in (None, ''):
+            first_item = VocabItem.objects.filter(
+                pk=word_id, topic=topic, language=language).first()
+            if first_item is None:
+                return Response(
+                    {'detail': f'Word {word_id!r} is not in {topic!r} for {language}.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         turn_limit = settings.SESSION_TURN_LIMIT
         if settings.DEMO_MODE:
             # The canned bank wraps, so a longer session would replay the same
@@ -502,7 +517,8 @@ class StartSessionView(APIView):
             turn_limit = min(turn_limit, llm.demo_bank_size(topic, language))
 
         items = sm2.select_session_items(
-            user, topic, limit=turn_limit, language=language)
+            user, topic, limit=turn_limit, language=language,
+            first_item=first_item)
         # Never plan more turns than there is vocabulary to drill. Otherwise
         # the tail of the session has no target item, so those turns grade
         # nothing and the recap silently under-reports.

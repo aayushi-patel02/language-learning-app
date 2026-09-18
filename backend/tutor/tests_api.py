@@ -926,3 +926,87 @@ class LanguageScopingTests(TestCase):
         response = self.client.get(reverse('language-list'), **self.auth())
         offered = {row['code'] for row in response.json()['languages']}
         self.assertNotIn('German', offered)
+
+
+class FocusWordTests(TestCase):
+    """Asking for a word by name must actually drill that word.
+
+    "Practise this topic" on a word's own page started an ordinary session, so
+    the scheduler's easiest-first order decided what came up. A difficulty-2
+    word sorts behind every difficulty-1 word and never fitted inside the turn
+    limit, so the learner practised the topic and the word they clicked stayed
+    "not started".
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='learner')
+        self.token = Token.objects.create(user=self.user)
+        Profile.objects.create(user=self.user, learning_language='Spanish')
+
+        # Eight easy words fill a whole session on their own.
+        for n in range(8):
+            VocabItem.objects.create(
+                language='Spanish', topic=TOPIC, term=f'facil{n}',
+                english=f'easy {n}', difficulty=1)
+        self.hard = VocabItem.objects.create(
+            language='Spanish', topic=TOPIC, term='vestirse',
+            english='to get dressed', difficulty=3)
+        self.other_topic = VocabItem.objects.create(
+            language='Spanish', topic='ordering_food', term='la cuenta',
+            english='the bill', difficulty=1)
+        self.other_language = VocabItem.objects.create(
+            language='German', topic=TOPIC, term='aufstehen',
+            english='to get up', difficulty=1)
+
+    def auth(self):
+        return {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
+
+    def start(self, **payload):
+        return self.client.post(
+            reverse('session-start'), {'topic': TOPIC, **payload},
+            content_type='application/json', **self.auth())
+
+    def planned(self, response):
+        session = ConversationSession.objects.get(pk=response.json()['session_id'])
+        return [
+            VocabItem.objects.get(pk=pk).term
+            for pk in session.planned_item_ids
+        ]
+
+    def test_without_a_word_a_hard_one_never_makes_the_cut(self):
+        with stub_turn():
+            plan = self.planned(self.start())
+        self.assertNotIn('vestirse', plan)
+
+    def test_asking_for_a_word_puts_it_first(self):
+        with stub_turn():
+            plan = self.planned(self.start(word_id=self.hard.pk))
+        self.assertEqual(plan[0], 'vestirse')
+
+    def test_asking_for_a_word_does_not_lengthen_the_session(self):
+        with stub_turn():
+            without = self.planned(self.start())
+            with_word = self.planned(self.start(word_id=self.hard.pk))
+        self.assertEqual(len(with_word), len(without))
+
+    def test_asking_for_a_word_does_not_duplicate_it(self):
+        easy = VocabItem.objects.get(term='facil0')
+        with stub_turn():
+            plan = self.planned(self.start(word_id=easy.pk))
+        self.assertEqual(plan[0], 'facil0')
+        self.assertEqual(plan.count('facil0'), 1)
+
+    def test_a_word_from_another_topic_is_refused(self):
+        with stub_turn():
+            response = self.start(word_id=self.other_topic.pk)
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_word_from_another_language_is_refused(self):
+        with stub_turn():
+            response = self.start(word_id=self.other_language.pk)
+        self.assertEqual(response.status_code, 400)
+
+    def test_an_unknown_word_id_is_refused(self):
+        with stub_turn():
+            response = self.start(word_id=999999)
+        self.assertEqual(response.status_code, 400)

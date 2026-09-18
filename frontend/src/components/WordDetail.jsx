@@ -192,13 +192,17 @@ export default function WordDetail() {
         </ul>
       )}
 
+      {/* Carries the word id, so the lesson opens on this word rather than
+          wherever the scheduler would have reached on its own. A hard word
+          sorts behind every easier one, so without this the learner could
+          never get to the word they just asked for. */}
       <Link
-        to={`/chat/${word.topic}`}
+        to={`/chat/${word.topic}?word=${word.id}`}
         className="btn-3d mt-8 flex min-h-12 items-center justify-center rounded-2xl
                    bg-learner px-4 py-3 text-sm font-extrabold tracking-wide
                    text-white uppercase hover:brightness-110"
       >
-        Practise this topic
+        Practise this word
       </Link>
     </Shell>
   )
