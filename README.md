@@ -117,8 +117,12 @@ python manage.py seed_vocab
 python manage.py runserver
 ```
 
-The API is at `http://127.0.0.1:8000/api/`, the Django admin at `/admin/`
+The API is at `http://127.0.0.1:8001/api/`, the Django admin at `/admin/`
 (run `python manage.py createsuperuser` first).
+
+`runserver` defaults to 8001 rather than Django's 8000, so this can run
+alongside another local Django project. Pass a port to override it, or set
+`CHARLA_PORT`.
 
 **Frontend**
 
