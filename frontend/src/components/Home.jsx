@@ -31,15 +31,30 @@ export default function Home() {
             conversation. What you get wrong comes back sooner.
           </p>
         </div>
-        <Link
-          to="/profile"
-          aria-label="Your profile"
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
-                     border border-line bg-white text-2xl transition-colors
-                     hover:border-ink/20"
-        >
-          {user?.avatar ?? '🦉'}
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* A guest who already has an account has nowhere else to reach
+              one from: the welcome gate is behind them and the profile
+              offers signup, not sign-in. */}
+          {user?.is_guest && (
+            <Link
+              to="/login"
+              className="inline-flex min-h-11 items-center rounded-full border
+                         border-line bg-white px-3.5 text-xs font-bold
+                         transition-colors hover:border-ink/20"
+            >
+              Log in
+            </Link>
+          )}
+          <Link
+            to="/profile"
+            aria-label="Your profile"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+                       border border-line bg-white text-2xl transition-colors
+                       hover:border-ink/20"
+          >
+            {user?.avatar ?? '🦉'}
+          </Link>
+        </div>
       </header>
 
       {loads !== null && (

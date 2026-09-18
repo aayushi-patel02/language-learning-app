@@ -100,6 +100,16 @@ export default function Profile() {
           >
             Create an account
           </Link>
+          {/* The other half of the same problem: signing in to an account
+              that already exists. Without this a guest cannot reach one,
+              since there is no log out to go back through. */}
+          <Link
+            to="/login"
+            className="mt-2 flex min-h-11 items-center justify-center text-xs
+                       font-bold text-muted underline"
+          >
+            I already have an account
+          </Link>
         </div>
       )}
 

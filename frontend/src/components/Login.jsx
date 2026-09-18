@@ -7,7 +7,7 @@ import AuthShell, { Field, SubmitButton } from './AuthShell'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { adopt } = useAuth()
+  const { adopt, user } = useAuth()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -46,7 +46,17 @@ export default function Login() {
   }
 
   return (
-    <AuthShell title="Welcome back" subtitle="Pick up where you left off.">
+    <AuthShell
+      title="Welcome back"
+      subtitle={
+        // Signing in swaps to a different account, so anything practised as
+        // a guest on this device stays behind. Said plainly here rather than
+        // discovered afterwards, with the path that keeps it named.
+        user?.is_guest
+          ? 'Signing in leaves your guest practice behind. Create an account instead to keep it.'
+          : 'Pick up where you left off.'
+      }
+    >
       <form onSubmit={submit} noValidate>
         <Field
           label="Email"
