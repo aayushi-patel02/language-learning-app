@@ -29,11 +29,17 @@ services:
       - key: CSRF_TRUSTED_ORIGINS
         sync: false
 
-      # DEMO_MODE=true is the Demo Day safety net: no outbound API call, so a
-      # provider outage or rate limit cannot break the live demo. Flip to
-      # false to show the model working.
+      # false, so the deployed app answers with the model. It is still safe:
+      # a failed call falls back to the same hand-written bank demo mode
+      # serves, so an outage degrades the lesson rather than breaking it.
+      #
+      # true means never calling out at all, which is worth it only for a
+      # scripted run that has to be byte-identical every time. Set it in the
+      # dashboard for that, and remember this file wins on the next blueprint
+      # sync - shipping "true" here is how a dashboard override got quietly
+      # reverted once already.
       - key: DEMO_MODE
-        value: "true"
+        value: "false"
 
       - key: LLM_PROVIDER
         value: "groq"
