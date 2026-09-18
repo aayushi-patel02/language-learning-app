@@ -87,7 +87,7 @@ export default function Profile() {
       </div>
 
       {user.is_guest && (
-        <div className="mt-5 rounded-2xl bg-topic-morning-soft px-4 py-3.5">
+        <div className="mt-5 rounded-2xl bg-learner-soft px-4 py-3.5">
           <p className="text-sm font-bold">Your progress is not saved anywhere</p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Create an account and everything you have practised comes with you.
@@ -96,7 +96,7 @@ export default function Profile() {
           <Link
             to="/signup"
             className="btn mt-3 flex min-h-11 items-center justify-center rounded-xl
-                       bg-topic-morning px-4 py-2 text-xs font-extrabold tracking-wide
+                       bg-learner px-4 py-2 text-xs font-extrabold tracking-wide
                        text-white uppercase hover:brightness-110"
           >
             Create an account
