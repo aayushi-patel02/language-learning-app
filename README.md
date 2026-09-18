@@ -175,7 +175,7 @@ Deployed and working end to end, in all four languages: data model, SM-2
 scheduler, LLM adapter with fallbacks, the API, vocab seed, accounts, Django
 admin and the React frontend. 231 tests, none of which touch the network.
 
-- Frontend: [language-learning-app-orcin.vercel.app](https://language-learning-app-orcin.vercel.app)
+- Frontend: [charla-learn.vercel.app](https://charla-learn.vercel.app)
 - Backend: [charla-api.onrender.com](https://charla-api.onrender.com)
 
 Running live against Groq (`openai/gpt-oss-120b`). `DEMO_MODE=true` switches
