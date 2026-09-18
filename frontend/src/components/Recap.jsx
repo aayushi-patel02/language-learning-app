@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { getRecap } from '../api'
 import { formatDue, formatStreak } from '../dates'
@@ -8,6 +8,12 @@ export default function Recap() {
   const { sessionId } = useParams()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+
+  // Carried through the lesson from a word's own page. A lesson opened for
+  // one word should end back at that word, showing what practising it did
+  // to its schedule, not at the topic list.
+  const [searchParams] = useSearchParams()
+  const focusWordId = Number(searchParams.get('word')) || null
 
   useEffect(() => {
     getRecap(sessionId)
@@ -36,6 +42,13 @@ export default function Recap() {
   const accuracy =
     data.accuracy === null ? 'n/a' : `${Math.round(data.accuracy * 100)}%`
 
+  // Only when the word was actually reached. Ending a lesson on turn one
+  // leaves the rest of the plan ungraded, and offering to go back to a word
+  // whose numbers did not move would be a lie.
+  const focusWord = focusWordId
+    ? data.words.find((word) => word.id === focusWordId)
+    : null
+
   return (
     <Shell>
       <div className="animate-pop py-4 text-center">
@@ -49,7 +62,13 @@ export default function Recap() {
         <h1 className="mt-4 text-2xl font-bold tracking-tight">
           Lesson complete
         </h1>
-        <p className="mt-1 text-sm text-muted">{data.topic_label}</p>
+        {/* Same words as the banner on the lesson screen, so the two agree
+            about why this lesson happened. */}
+        <p className="mt-1 text-sm text-muted">
+          {focusWord
+            ? `${data.topic_label}, starting with ${focusWord.term}`
+            : data.topic_label}
+        </p>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-3">
@@ -69,7 +88,7 @@ export default function Recap() {
       ) : (
         <ul className="mt-3 divide-y divide-line">
           {data.words.map((word) => (
-            <li key={word.term} className="flex items-center gap-3 py-2.5">
+            <li key={word.id ?? word.term} className="flex items-center gap-3 py-2.5">
               <span
                 aria-hidden="true"
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -121,13 +140,19 @@ export default function Recap() {
         >
           Next lesson
         </Link>
+        {/* A lesson opened from a word ends back at that word, where its new
+            review date and streak are waiting. Sending it home instead
+            dropped the learner one screen away from the only thing they
+            came to see. */}
         <Link
-          to="/"
+          to={focusWord ? `/vocabulary/${focusWord.id}` : '/'}
           className="btn flex min-h-12 items-center justify-center rounded-2xl
                      border border-line bg-white px-4 py-3 text-sm font-extrabold
                      tracking-wide uppercase transition-colors hover:border-learner"
         >
-          Back to topics
+          <span className="truncate">
+            {focusWord ? `Back to ${focusWord.term}` : 'Back to topics'}
+          </span>
         </Link>
       </div>
     </Shell>
