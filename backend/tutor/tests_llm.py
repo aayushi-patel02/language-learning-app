@@ -728,3 +728,71 @@ class FallbackBankTests(TestCase):
                 self.assertEqual(
                     llm.demo_bank_size(DAILY_ROUTINE, language),
                     len(llm.FALLBACK_TURNS[language][DAILY_ROUTINE]))
+
+
+class DuplicateReplyTests(TestCase):
+    """The same sentence offered twice makes a correction read as nonsense.
+
+    Seen live in Hindi: one copy marked correct, one marked wrong with a
+    reason describing an error that was not in the text. Tapping the wrong
+    copy produced "Not quite, the correct answer is" followed by the
+    identical sentence.
+    """
+
+    SAME = 'मैं रोज़ पाँच घंटे काम करता हूँ।'
+    OTHER = 'मैं रोज़ पाँच घंटे काम करती हूँ।'
+
+    def test_a_repeated_sentence_is_offered_once(self):
+        chips = llm._normalise_replies([
+            {'text': self.SAME, 'is_correct': False, 'why_wrong': 'gender'},
+            {'text': self.SAME, 'is_correct': True},
+            {'text': self.OTHER, 'is_correct': False, 'why_wrong': 'gender'},
+        ])
+        self.assertEqual(len(chips), 2)
+        self.assertEqual(chips[0]['text'], self.SAME)
+
+    def test_correct_wins_when_the_copies_disagree(self):
+        chips = llm._normalise_replies([
+            {'text': self.SAME, 'is_correct': False, 'why_wrong': 'gender'},
+            {'text': self.SAME, 'is_correct': True},
+            {'text': self.OTHER, 'is_correct': False, 'why_wrong': 'gender'},
+        ])
+        survivor = next(c for c in chips if c['text'] == self.SAME)
+        self.assertTrue(survivor['is_correct'])
+        self.assertEqual(survivor['why_wrong'], '',
+                         'a correct reply cannot keep a reason for being wrong')
+
+    def test_whitespace_and_case_do_not_hide_a_duplicate(self):
+        chips = llm._normalise_replies([
+            {'text': 'Me levanto a las siete.', 'is_correct': True},
+            {'text': '  me   levanto a las siete. ', 'is_correct': False,
+             'why_wrong': 'nope'},
+            {'text': 'Yo levanto a las siete.', 'is_correct': False,
+             'why_wrong': 'needs the reflexive'},
+        ])
+        self.assertEqual(len(chips), 2)
+
+    def test_ids_stay_contiguous_after_a_drop(self):
+        chips = llm._normalise_replies([
+            {'text': self.SAME, 'is_correct': True},
+            {'text': self.SAME, 'is_correct': False, 'why_wrong': 'x'},
+            {'text': self.OTHER, 'is_correct': False, 'why_wrong': 'gender'},
+        ])
+        # The client names its choice by id, so a gap would break grading.
+        self.assertEqual([c['id'] for c in chips], list(range(len(chips))))
+
+    def test_a_turn_of_nothing_but_duplicates_is_refused(self):
+        # One option is not a question, so fall back to the written bank.
+        with self.assertRaises(llm.LLMError):
+            llm._normalise_replies([
+                {'text': self.SAME, 'is_correct': True},
+                {'text': self.SAME, 'is_correct': False, 'why_wrong': 'x'},
+            ])
+
+    def test_distinct_replies_are_left_alone(self):
+        chips = llm._normalise_replies([
+            {'text': 'uno', 'is_correct': True},
+            {'text': 'dos', 'is_correct': False, 'why_wrong': 'a'},
+            {'text': 'tres', 'is_correct': False, 'why_wrong': 'b'},
+        ])
+        self.assertEqual([c['text'] for c in chips], ['uno', 'dos', 'tres'])

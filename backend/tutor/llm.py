@@ -138,7 +138,10 @@ ERROR_KINDS
 - If a native speaker would accept the sentence as correct, IT IS NOT WRONG.
   ALLOWANCES
 - Make wrong options tempting, never absurd or comical.
-- `why_wrong` must name the specific grammatical error, not a vague judgement.
+- The three replies must be three DIFFERENT sentences. Never repeat the same
+  wording twice, and never mark two identical sentences differently.
+- `why_wrong` must name the specific grammatical error, not a vague judgement,
+  and that error must actually be present in that reply's text.
 
 Return ONLY a JSON object. No prose, no markdown fences.
 
@@ -445,6 +448,45 @@ def _clean_str(value):
     return str(value).strip() if value is not None else ''
 
 
+def _drop_duplicate_replies(chips):
+    """Collapse replies that say exactly the same thing.
+
+    Models sometimes emit one sentence twice, marking one copy correct and
+    the other wrong, with a `why_wrong` describing an error that is not in
+    the text. Tapping the wrong copy then produces "Not quite, the correct
+    answer is" followed by the identical sentence, which reads as a broken
+    app rather than a wrong answer.
+
+    Correct wins when copies disagree, and a chip that is correct cannot
+    keep a reason for being wrong. If this leaves fewer than two replies the
+    caller's own checks reject the turn and the hand-written bank answers
+    instead, which is the right outcome: a turn with one option is not a
+    question.
+    """
+    kept = []
+    first_by_text = {}
+
+    for chip in chips:
+        key = ' '.join(chip['text'].split()).casefold()
+        first = first_by_text.get(key)
+        if first is None:
+            first_by_text[key] = chip
+            kept.append(chip)
+            continue
+        if chip['is_correct'] and not first['is_correct']:
+            first['is_correct'] = True
+            first['why_wrong'] = ''
+
+    if len(kept) != len(chips):
+        logger.warning('dropped %d duplicate reply(ies)', len(chips) - len(kept))
+
+    # Ids are how the client names its choice, so they have to stay
+    # contiguous after anything is removed.
+    for position, chip in enumerate(kept):
+        chip['id'] = position
+    return kept
+
+
 def _normalise_replies(raw):
     """Force the model's reply list into usable chips.
 
@@ -476,6 +518,8 @@ def _normalise_replies(raw):
             'is_correct': bool(entry.get('is_correct')),
             'why_wrong': _clean_str(entry.get('why_wrong')),
         })
+
+    chips = _drop_duplicate_replies(chips)
 
     if len(chips) < 2:
         raise LLMError(f'need at least 2 usable replies, got {len(chips)}')
