@@ -39,9 +39,16 @@ export default function Chat({ topic }) {
   const startedFor = useRef(null)
 
   // Set when the learner arrived from a word's own page, asking for that
-  // word specifically.
+  // word specifically. The backend echoes the word back so this screen can
+  // name it, and so leaving goes back where they came from rather than home.
   const [searchParams] = useSearchParams()
   const focusWordId = searchParams.get('word')
+  const [focusWord, setFocusWord] = useState(null)
+
+  const leaveTo = focusWordId ? `/vocabulary/${focusWordId}` : '/'
+  const recapPath = focusWordId
+    ? `/recap/${sessionId}?word=${focusWordId}`
+    : `/recap/${sessionId}`
 
   useEffect(() => {
     if (startedFor.current === topic) return
@@ -51,6 +58,7 @@ export default function Chat({ topic }) {
     startSession(topic, focusWordId)
       .then(({ data }) => {
         setSessionId(data.session_id)
+        setFocusWord(data.focus_word ?? null)
         setProgress({ answered: 0, limit: data.turn_limit })
         setMessages([
           { kind: 'tutor', text: data.turn.ai_message, en: data.turn.ai_message_en },
@@ -135,7 +143,7 @@ export default function Chat({ topic }) {
 
   if (status === 'loading') {
     return (
-      <Shell topic={topicMeta}>
+      <Shell topic={topicMeta} leaveTo={leaveTo}>
         <p className="py-16 text-center text-sm text-muted">Starting a lesson…</p>
       </Shell>
     )
@@ -143,23 +151,42 @@ export default function Chat({ topic }) {
 
   if (status === 'error' && !sessionId) {
     return (
-      <Shell topic={topicMeta}>
+      <Shell topic={topicMeta} leaveTo={leaveTo}>
         <div className="rounded-xl border border-line bg-error-soft px-4 py-5">
           <p className="text-sm font-medium text-error">Could not start the lesson</p>
           <p className="mt-1 text-xs text-muted">{error}</p>
         </div>
         <Link
-          to="/"
+          to={leaveTo}
           className="mt-4 inline-flex min-h-11 items-center text-xs text-muted underline"
         >
-          Back to topics
+          {focusWordId ? 'Back to the word' : 'Back to topics'}
         </Link>
       </Shell>
     )
   }
 
   return (
-    <Shell topic={topicMeta} progress={progress}>
+    <Shell topic={topicMeta} progress={progress} leaveTo={leaveTo}>
+      {/* Says out loud why this lesson opened. Without it the screen is
+          headed with the topic alone, so tapping "practise this word" on
+          बिल and landing in Ordering Food reads as the app ignoring the
+          request rather than answering it. */}
+      {focusWord && (
+        <div className="mb-3 flex items-baseline gap-2 rounded-2xl bg-learner-soft
+                        px-3.5 py-2.5">
+          <span className="text-[11px] font-bold tracking-wide text-learner uppercase">
+            Starting with
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-bold">
+            {focusWord.term}
+          </span>
+          <span className="shrink-0 truncate text-xs text-muted">
+            {focusWord.english}
+          </span>
+        </div>
+      )}
+
       {/* justify-end keeps a short conversation sitting above the controls
           instead of stranding two bubbles at the top of an empty screen. */}
       <div className="flex flex-1 flex-col justify-end space-y-2.5 pb-4">
@@ -196,7 +223,7 @@ export default function Chat({ topic }) {
       {status === 'done' && (
         <button
           type="button"
-          onClick={() => navigate(`/recap/${sessionId}`)}
+          onClick={() => navigate(recapPath)}
           className="btn min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
                      font-extrabold tracking-wide text-white uppercase
                      hover:brightness-110"
@@ -247,7 +274,7 @@ export default function Chat({ topic }) {
           )}
           <button
             type="button"
-            onClick={() => navigate(`/recap/${sessionId}`)}
+            onClick={() => navigate(recapPath)}
             className="inline-flex min-h-11 items-center pl-3 text-xs text-muted
                        underline"
           >
@@ -259,7 +286,7 @@ export default function Chat({ topic }) {
   )
 }
 
-function Shell({ topic, progress, children }) {
+function Shell({ topic, progress, leaveTo = '/', children }) {
   const done = progress?.answered ?? 0
   const total = progress?.limit ?? 0
   const percent = total ? Math.round((done / total) * 100) : 0
@@ -267,8 +294,10 @@ function Shell({ topic, progress, children }) {
   return (
     <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-5 pb-28">
       <header className="mb-4 flex items-center gap-3">
+        {/* Abandoning a lesson returns where it was opened from: the word's
+            page when that is where the learner came from, otherwise home. */}
         <Link
-          to="/"
+          to={leaveTo}
           aria-label="Leave this lesson"
           className="-ml-1 inline-flex h-11 w-11 shrink-0 items-center justify-center
                      rounded-full text-muted transition-colors hover:bg-surface

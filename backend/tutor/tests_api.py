@@ -721,7 +721,7 @@ class RecapTests(ApiTestCase):
         body = self.client.get(reverse('session-recap', args=[session_id])).json()
         word = body['words'][0]
         self.assertEqual(set(word), {
-            'term', 'romanisation', 'language', 'english', 'was_correct',
+            'id', 'term', 'romanisation', 'language', 'english', 'was_correct',
             'graded', 'due_date', 'interval_days', 'repetitions',
             'ease_factor'})
         self.assertTrue(word['was_correct'])
@@ -1010,6 +1010,60 @@ class FocusWordTests(TestCase):
         with stub_turn():
             response = self.start(word_id=999999)
         self.assertEqual(response.status_code, 400)
+
+    def test_the_requested_word_comes_back_in_the_response(self):
+        """The lesson screen names the word it was opened for.
+
+        Headed with the topic alone, a lesson started from 'vestirse' looks
+        like the app ignored the request and ran Daily Routine instead.
+        """
+        with stub_turn():
+            response = self.start(word_id=self.hard.pk)
+        focus = response.json()['focus_word']
+        self.assertEqual(focus['id'], self.hard.pk)
+        self.assertEqual(focus['term'], 'vestirse')
+        self.assertEqual(focus['english'], 'to get dressed')
+
+    def test_an_ordinary_lesson_has_no_focus_word(self):
+        with stub_turn():
+            response = self.start()
+        self.assertIsNone(response.json()['focus_word'])
+
+
+class RecapIdentifiesWordsTests(TestCase):
+    """Every recapped word carries its id.
+
+    The recap is where a word-focused lesson ends, and the way back to that
+    word's own page is built from this id. Reporting the spelling alone left
+    the recap unable to link anywhere.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='learner')
+        self.token = Token.objects.create(user=self.user)
+        Profile.objects.create(user=self.user, learning_language='Spanish')
+        self.item = VocabItem.objects.create(
+            language='Spanish', topic=TOPIC, term='vestirse',
+            english='to get dressed', difficulty=1)
+
+    def test_a_recapped_word_reports_its_id(self):
+        with stub_turn():
+            start = self.client.post(
+                reverse('session-start'), {'topic': TOPIC},
+                content_type='application/json',
+                HTTP_AUTHORIZATION=f'Token {self.token.key}')
+            session_id = start.json()['session_id']
+            self.client.post(
+                reverse('session-next', args=[session_id]),
+                {'mode': 'chip', 'reply_id': 0},
+                content_type='application/json',
+                HTTP_AUTHORIZATION=f'Token {self.token.key}')
+
+        recap = self.client.get(
+            reverse('session-recap', args=[session_id]),
+            HTTP_AUTHORIZATION=f'Token {self.token.key}')
+        words = recap.json()['words']
+        self.assertEqual([word['id'] for word in words], [self.item.pk])
 
 
 class ShelfPartitionTests(TestCase):

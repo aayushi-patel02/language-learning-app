@@ -123,6 +123,23 @@ def _create_turn(session, index, planned_item, result):
     )
 
 
+def _focus_word_payload(item):
+    """The word a lesson was opened for, echoed back to the client.
+
+    A learner who taps "practise this word" lands on a screen headed with the
+    topic, so nothing on it acknowledges the word they asked for. Returning it
+    lets the lesson name it, and lets the recap offer the way back.
+    """
+    if item is None:
+        return None
+    return {
+        'id': item.pk,
+        'term': item.term,
+        'romanisation': item.romanisation,
+        'english': item.english,
+    }
+
+
 def _correct_option(chips):
     for chip in chips or []:
         if chip.get('is_correct'):
@@ -600,6 +617,8 @@ class StartSessionView(APIView):
                 'session_id': session.pk,
                 'topic': session.topic,
                 'turn_limit': session.turn_limit,
+                # Null for an ordinary lesson off the home screen.
+                'focus_word': _focus_word_payload(first_item),
                 'turn': TurnSerializer(turn).data,
             },
             status=status.HTTP_201_CREATED,
@@ -803,6 +822,9 @@ class SessionRecapView(APIView):
             seen.add(item.pk)
             state = states.get(item.pk)
             words.append({
+                # Carried so the recap can link a word back to its own page,
+                # and can pick out the one the lesson was opened for.
+                'id': item.pk,
                 'term': item.term,
                 # Blank for the Latin-script languages, so the recap only
                 # shows a second line where there is one to show.
