@@ -1010,3 +1010,111 @@ class FocusWordTests(TestCase):
         with stub_turn():
             response = self.start(word_id=999999)
         self.assertEqual(response.status_code, 400)
+
+
+class ShelfPartitionTests(TestCase):
+    """The four shelves must partition the collection, with nothing lost.
+
+    An empty "to review" shelf right after a lesson looks like a bug and is
+    not one - SM-2 has pushed those words into the future deliberately. These
+    pin the boundaries so the counts can be trusted when they look surprising.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='shelved')
+        self.token = Token.objects.create(user=self.user)
+        Profile.objects.create(user=self.user, learning_language='Spanish')
+        self.items = [
+            VocabItem.objects.create(
+                language='Spanish', topic=TOPIC, term=f'palabra{n}',
+                english=f'word {n}')
+            for n in range(5)
+        ]
+
+    def state(self, index, **fields):
+        state, _ = UserVocabState.objects.get_or_create(
+            user=self.user, item=self.items[index])
+        for key, value in fields.items():
+            setattr(state, key, value)
+        state.save()
+        return state
+
+    def shelves(self):
+        response = self.client.get(
+            reverse('vocabulary-list'),
+            HTTP_AUTHORIZATION=f'Token {self.token.key}')
+        return response.json()
+
+    def test_a_word_practised_today_is_not_due_today(self):
+        # The exact case that looked broken: reviewed, scheduled for tomorrow.
+        self.state(0, total_reviews=1, correct_reviews=1, repetitions=1,
+                   interval_days=1,
+                   due_date=timezone.localdate() + timedelta(days=1))
+        body = self.shelves()
+        self.assertEqual(body['counts']['due'], 0)
+        self.assertEqual(body['counts']['learning'], 1)
+
+    def test_an_overdue_word_is_due(self):
+        self.state(0, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate() - timedelta(days=3))
+        self.assertEqual(self.shelves()['counts']['due'], 1)
+
+    def test_a_word_due_exactly_today_is_due(self):
+        self.state(0, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate())
+        self.assertEqual(self.shelves()['counts']['due'], 1)
+
+    def test_three_in_a_row_is_mastered_and_two_is_not(self):
+        self.state(0, total_reviews=3, correct_reviews=3, repetitions=2,
+                   due_date=timezone.localdate() + timedelta(days=6))
+        self.state(1, total_reviews=3, correct_reviews=3, repetitions=3,
+                   due_date=timezone.localdate() + timedelta(days=15))
+        counts = self.shelves()['counts']
+        self.assertEqual(counts['mastered'], 1)
+        self.assertEqual(counts['learning'], 1)
+
+    def test_mastered_wins_over_due(self):
+        # A well-known word that has come round again is still mastered;
+        # otherwise it would be counted twice.
+        self.state(0, total_reviews=4, correct_reviews=4, repetitions=4,
+                   due_date=timezone.localdate())
+        counts = self.shelves()['counts']
+        self.assertEqual(counts['mastered'], 1)
+        self.assertEqual(counts['due'], 0)
+
+    def test_the_shelves_always_add_up_to_the_collection(self):
+        self.state(0, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate() + timedelta(days=1))
+        self.state(1, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate() - timedelta(days=1))
+        self.state(2, total_reviews=5, correct_reviews=5, repetitions=3,
+                   due_date=timezone.localdate() + timedelta(days=20))
+
+        body = self.shelves()
+        counts = body['counts']
+        self.assertEqual(
+            counts['due'] + counts['learning'] + counts['mastered'] + counts['new'],
+            len(self.items))
+        self.assertEqual(body['total'], len(self.items))
+
+    def test_no_word_appears_on_two_shelves(self):
+        self.state(0, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate())
+        self.state(1, total_reviews=9, correct_reviews=9, repetitions=5,
+                   due_date=timezone.localdate())
+
+        shelves = self.shelves()['shelves']
+        seen = [word['id'] for shelf in shelves.values() for word in shelf]
+        self.assertEqual(len(seen), len(set(seen)))
+
+    def test_saved_is_a_cross_cut_not_a_shelf(self):
+        # A saved word still sits on whichever shelf it belongs to.
+        self.state(0, total_reviews=1, repetitions=1, is_saved=True,
+                   due_date=timezone.localdate() + timedelta(days=1))
+        body = self.shelves()
+        self.assertEqual(len(body['saved']), 1)
+        self.assertEqual(body['counts']['learning'], 1)
+        self.assertEqual(
+            body['counts']['due'] + body['counts']['learning']
+            + body['counts']['mastered'] + body['counts']['new'],
+            len(self.items))

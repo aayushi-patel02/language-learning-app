@@ -94,7 +94,10 @@ export default function Vocabulary() {
           </div>
 
           {words.length === 0 ? (
-            <EmptyShelf tab={tab} />
+            // The learning shelf is exactly the set of words that have been
+            // practised and are waiting on a future date, which is what the
+            // review shelf needs to explain itself.
+            <EmptyShelf tab={tab} waiting={listFor('learning')} />
           ) : (
             <ul className="flex flex-col gap-2">
               {words.map((word) => (
@@ -108,22 +111,47 @@ export default function Vocabulary() {
   )
 }
 
-function EmptyShelf({ tab }) {
-  const message = {
-    due: 'Nothing is due right now. Finish a lesson and words will appear here when they are ready for review.',
-    learning: 'No words in progress yet.',
-    mastered: 'None yet. A word lands here after three correct recalls in a row.',
-    new: 'You have started every word in the collection.',
-    saved: 'Tap the bookmark on any word to keep it here.',
-    recent: 'Words you practise will show up here.',
-  }[tab]
+function EmptyShelf({ tab, waiting }) {
+  // An empty review shelf is the normal state right after a lesson, so say
+  // when the words come back rather than implying nothing happened.
+  if (tab === 'due') {
+    return <Shelf>{nextDueSummary(waiting) ?? 'Nothing to review yet.'}</Shelf>
+  }
 
   return (
+    <Shelf>
+      {{
+        learning: 'No words in progress yet.',
+        mastered: 'None yet. A word lands here after three correct recalls in a row.',
+        new: 'You have started every word in the collection.',
+        saved: 'Tap the bookmark on any word to keep it here.',
+        recent: 'Words you practise will show up here.',
+      }[tab]}
+    </Shelf>
+  )
+}
+
+function Shelf({ children }) {
+  return (
     <p className="rounded-2xl border border-line bg-white px-4 py-8 text-center
-                  text-sm text-muted">
-      {message}
+                  text-sm leading-relaxed text-muted">
+      {children}
     </p>
   )
+}
+
+/** "All caught up. 18 words come back tomorrow." */
+function nextDueSummary(waiting) {
+  const dates = (waiting ?? [])
+    .map((word) => word.due_date)
+    .filter(Boolean)
+    .sort()
+  if (!dates.length) return null
+
+  const soonest = dates[0]
+  const count = dates.filter((date) => date === soonest).length
+  const noun = count === 1 ? 'word comes' : 'words come'
+  return `All caught up. ${count} ${noun} back ${formatDue(soonest)}.`
 }
 
 function WordRow({ word }) {
