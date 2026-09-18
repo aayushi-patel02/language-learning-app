@@ -195,9 +195,15 @@ filling in a web form. It prompts for the values marked `sync: false`
 generates `DJANGO_SECRET_KEY` itself. [`backend/build.sh`](backend/build.sh)
 installs, collects static files, migrates and seeds on every deploy.
 
-The blueprint ships with `DEMO_MODE=true`. That is intentional: a live demo
-should not depend on someone else's rate limit. Set it to `false` in the Render
-dashboard when you want to show the model working.
+The blueprint ships with `DEMO_MODE=false`, so the deployed app answers with
+the model. That is still safe: a failed call falls back to the same
+hand-written bank demo mode serves, so an outage degrades a lesson rather than
+breaking it.
+
+`DEMO_MODE=true` means never calling out at all, which is worth it only for a
+scripted run that has to be identical every time. Set it in the Render
+dashboard for that — and set it back, because `render.yaml` wins on the next
+blueprint sync.
 
 Render's free disk is ephemeral, so on SQLite the review history is wiped on
 every restart. Attach a Postgres instance and set `DATABASE_URL` to make the
