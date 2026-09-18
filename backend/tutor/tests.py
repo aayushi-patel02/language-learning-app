@@ -181,7 +181,7 @@ class ApplyReviewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='learner')
         self.item = VocabItem.objects.create(
-            spanish='desayunar', english='to have breakfast',
+            term='desayunar', english='to have breakfast',
             topic='daily_routine',
         )
         self.state = UserVocabState.objects.create(user=self.user, item=self.item)
@@ -227,12 +227,12 @@ class SchedulerTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='learner')
         self.easy = VocabItem.objects.create(
-            spanish='el pan', english='bread', topic='ordering_food', difficulty=1)
+            term='el pan', english='bread', topic='ordering_food', difficulty=1)
         self.hard = VocabItem.objects.create(
-            spanish='soy alérgico a', english="I'm allergic to",
+            term='soy alérgico a', english="I'm allergic to",
             topic='ordering_food', difficulty=3)
         self.other_topic = VocabItem.objects.create(
-            spanish='el tren', english='train', topic='travel_basics')
+            term='el tren', english='train', topic='travel_basics')
 
     def test_ensure_states_creates_one_state_per_item_in_topic(self):
         states = sm2.ensure_states(self.user, 'ordering_food')
@@ -249,7 +249,7 @@ class SchedulerTests(TestCase):
     def test_ensure_states_picks_up_vocab_added_later(self):
         sm2.ensure_states(self.user, 'ordering_food')
         VocabItem.objects.create(
-            spanish='la cuenta', english='the bill', topic='ordering_food')
+            term='la cuenta', english='the bill', topic='ordering_food')
         self.assertEqual(sm2.ensure_states(self.user, 'ordering_food').count(), 3)
 
     def test_selection_is_scoped_to_the_requested_topic(self):

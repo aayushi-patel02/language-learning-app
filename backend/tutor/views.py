@@ -16,6 +16,7 @@ from datetime import date, timedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -26,6 +27,9 @@ from rest_framework.views import APIView
 # call time, so tests can patch it without the reference being frozen here.
 from . import insights, llm, sm2
 from .models import (
+    DEFAULT_LANGUAGE,
+    LANGUAGE_CHOICES,
+    LANGUAGES,
     TOPIC_CHOICES,
     TOPIC_SLUGS,
     ConversationSession,
@@ -65,12 +69,23 @@ def current_learner(request):
 def _history(session):
     """The conversation so far, in the shape the prompts expect."""
     return [
-        {'tutor': turn.tutor_message_es, 'user': turn.user_reply}
+        {'tutor': turn.tutor_message, 'user': turn.user_reply}
         for turn in session.turns.order_by('index')
     ]
 
 
-def _resolve_target(topic, target_word, planned_item):
+def learner_language(user):
+    """The language this learner is studying.
+
+    Falls back to the default rather than raising: the seeded demo learner
+    has no profile, and a lesson still has to start for them.
+    """
+    profile = getattr(user, 'profile', None)
+    language = getattr(profile, 'learning_language', '') or DEFAULT_LANGUAGE
+    return language if language in LANGUAGES else DEFAULT_LANGUAGE
+
+
+def _resolve_target(topic, language, target_word, planned_item):
     """The vocab item a turn actually drills.
 
     The scheduler decides what *should* be practised and tells the model, but
@@ -79,10 +94,14 @@ def _resolve_target(topic, target_word, planned_item):
     follow the vocabulary the learner actually saw, or the recap credits a word
     they were never shown - so match the turn's own target back to the topic's
     vocab, and only fall back to the plan when it doesn't match anything.
+
+    Scoped to the session's language as well as its topic, because a spelling
+    is only unique within a language.
     """
     word = str(target_word or '').strip()
     if word:
-        match = VocabItem.objects.filter(topic=topic, spanish__iexact=word).first()
+        match = VocabItem.objects.filter(
+            language=language, topic=topic, term__iexact=word).first()
         if match is not None:
             return match
     return planned_item
@@ -92,12 +111,13 @@ def _create_turn(session, index, planned_item, result):
     return Turn.objects.create(
         session=session,
         index=index,
-        tutor_message_es=result['tutor_message_es'],
+        tutor_message=result['tutor_message'],
         tutor_message_en=result['tutor_message_en'],
         sentence_starter=result.get('sentence_starter', ''),
         suggested_replies=result['replies'],
         target_item=_resolve_target(
-            session.topic, result.get('target_word'), planned_item),
+            session.topic, session.language, result.get('target_word'),
+            planned_item),
         llm_provider=result['provider'],
         from_cache=result['from_cache'],
     )
@@ -106,8 +126,33 @@ def _create_turn(session, index, planned_item, result):
 def _correct_option(chips):
     for chip in chips or []:
         if chip.get('is_correct'):
-            return chip.get('es', '')
+            return chip.get('text', '')
     return ''
+
+
+class LanguageListView(APIView):
+    """GET /api/languages/ - what Charla can actually teach.
+
+    Built from the vocabulary table rather than from a constant, so the
+    profile picker can only ever offer a language that has words behind it.
+    Offering one that does not is how the picker came to promise seven
+    languages while every lesson ran in Spanish.
+    """
+
+    def get(self, request):
+        counts = dict(
+            VocabItem.objects.values_list('language')
+            .annotate(n=Count('id'))
+            .values_list('language', 'n')
+        )
+        return Response({
+            'languages': [
+                {'code': code, 'label': label, 'word_count': counts[code]}
+                for code, label in LANGUAGE_CHOICES
+                if counts.get(code)
+            ],
+            'current': learner_language(current_learner(request)),
+        })
 
 
 class TopicListView(APIView):
@@ -123,6 +168,7 @@ class TopicListView(APIView):
 
     def get(self, request):
         user = current_learner(request)
+        language = learner_language(user)
         today = timezone.localdate()
 
         states = {
@@ -133,7 +179,8 @@ class TopicListView(APIView):
         payload = []
         for slug, label in TOPIC_CHOICES:
             due = new = scheduled = 0
-            items = VocabItem.objects.filter(topic=slug).only('id')
+            items = VocabItem.objects.filter(
+                language=language, topic=slug).only('id')
             for item in items:
                 state = states.get(item.pk)
                 if state is None or state.total_reviews == 0:
@@ -159,12 +206,16 @@ def _word_payload(item, state):
     """One vocabulary row, shared by the library and the detail screen."""
     return {
         'id': item.pk,
-        'spanish': item.spanish,
+        'term': item.term,
+        # Empty for the Latin-script languages; the library only renders
+        # it when there is something to render.
+        'romanisation': item.romanisation,
+        'language': item.language,
         'english': item.english,
         'topic': item.topic,
         'topic_label': item.get_topic_display(),
         'part_of_speech': item.part_of_speech,
-        'example_es': item.example_es,
+        'example': item.example,
         'example_en': item.example_en,
         'shelf': state.shelf,
         'is_saved': state.is_saved,
@@ -189,7 +240,8 @@ class VocabularyListView(APIView):
 
     def get(self, request):
         user = current_learner(request)
-        states = sm2.ensure_states(user).select_related('item')
+        states = sm2.ensure_states(
+            user, language=learner_language(user)).select_related('item')
 
         shelves = {'due': [], 'learning': [], 'mastered': [], 'new': []}
         saved = []
@@ -200,11 +252,11 @@ class VocabularyListView(APIView):
                 saved.append(payload)
 
         # Ordering per shelf: the most useful thing first in each case.
-        shelves['due'].sort(key=lambda w: (w['due_date'] or date.max, w['spanish']))
-        shelves['learning'].sort(key=lambda w: (w['due_date'] or date.max, w['spanish']))
+        shelves['due'].sort(key=lambda w: (w['due_date'] or date.max, w['term']))
+        shelves['learning'].sort(key=lambda w: (w['due_date'] or date.max, w['term']))
         shelves['mastered'].sort(key=lambda w: -w['repetitions'])
-        shelves['new'].sort(key=lambda w: (w['topic'], w['spanish']))
-        saved.sort(key=lambda w: w['spanish'])
+        shelves['new'].sort(key=lambda w: (w['topic'], w['term']))
+        saved.sort(key=lambda w: w['term'])
 
         recent_ids = list(
             Turn.objects.filter(
@@ -255,7 +307,7 @@ class WordDetailView(APIView):
         appearances = [
             {
                 'session_id': turn.session_id,
-                'tutor_message_es': turn.tutor_message_es,
+                'tutor_message': turn.tutor_message,
                 'tutor_message_en': turn.tutor_message_en,
                 'user_reply': turn.user_reply,
                 'was_correct': turn.was_correct,
@@ -415,7 +467,7 @@ class ProgressView(APIView):
             'hardest_words': [
                 {
                     'id': state.item_id,
-                    'spanish': state.item.spanish,
+                    'term': state.item.term,
                     'english': state.item.english,
                     'lapses': state.lapses,
                     'accuracy': round(state.accuracy, 2)
@@ -442,20 +494,22 @@ class StartSessionView(APIView):
             )
 
         user = current_learner(request)
+        language = learner_language(user)
         turn_limit = settings.SESSION_TURN_LIMIT
         if settings.DEMO_MODE:
             # The canned bank wraps, so a longer session would replay the same
             # questions. Better a short demo than a visibly repeating one.
-            turn_limit = min(turn_limit, llm.demo_bank_size(topic))
+            turn_limit = min(turn_limit, llm.demo_bank_size(topic, language))
 
-        items = sm2.select_session_items(user, topic, limit=turn_limit)
+        items = sm2.select_session_items(
+            user, topic, limit=turn_limit, language=language)
         # Never plan more turns than there is vocabulary to drill. Otherwise
         # the tail of the session has no target item, so those turns grade
         # nothing and the recap silently under-reports.
         turn_limit = min(turn_limit, len(items))
         if not items:
             return Response(
-                {'detail': f'No vocabulary seeded for {topic!r}. '
+                {'detail': f'No {language} vocabulary seeded for {topic!r}. '
                            f'Run: python manage.py seed_vocab'},
                 status=status.HTTP_409_CONFLICT,
             )
@@ -463,12 +517,13 @@ class StartSessionView(APIView):
         # Called before opening the transaction so a slow provider doesn't hold
         # a write lock for the length of a network round trip.
         result = llm.get_next_turn(
-            topic, due_items=[items[0]], history=[], turn_index=0)
+            topic, language, due_items=[items[0]], history=[], turn_index=0)
 
         with transaction.atomic():
             session = ConversationSession.objects.create(
                 user=user,
                 topic=topic,
+                language=language,
                 turn_limit=turn_limit,
                 planned_item_ids=[item.pk for item in items],
             )
@@ -544,6 +599,7 @@ class NextTurnView(APIView):
             # it instead of paying for a second call.
             result = graded.get('continuation') or llm.get_next_turn(
                 session.topic,
+                session.language,
                 due_items=[target] if target else [],
                 history=_history(session),
                 turn_index=next_index,
@@ -557,7 +613,7 @@ class NextTurnView(APIView):
                 'graded': graded['graded'],
                 'quality': graded['quality'],
                 'feedback_en': graded['feedback_en'],
-                'corrected_es': graded['corrected_es'],
+                'corrected': graded['corrected'],
                 'interval_days': sm2_result.interval_days if sm2_result else None,
                 'due_date': sm2_result.due_date if sm2_result else None,
             },
@@ -586,9 +642,9 @@ class NextTurnView(APIView):
             'graded': True,
             'was_correct': was_correct,
             'quality': sm2.quality_for_chip(was_correct),
-            'user_reply': chosen.get('es', ''),
+            'user_reply': chosen.get('text', ''),
             'feedback_en': '' if was_correct else chosen.get('why_wrong', ''),
-            'corrected_es': '' if was_correct else _correct_option(chips),
+            'corrected': '' if was_correct else _correct_option(chips),
             'continuation': None,
         }
 
@@ -596,6 +652,7 @@ class NextTurnView(APIView):
         text = str(request.data.get('text') or '').strip()
         evaluation = llm.evaluate_freetext_reply(
             session.topic,
+            session.language,
             current.target_item,
             text,
             history=_history(session),
@@ -617,7 +674,7 @@ class NextTurnView(APIView):
             'quality': quality,
             'user_reply': text,
             'feedback_en': evaluation['feedback_en'],
-            'corrected_es': evaluation['corrected_es'],
+            'corrected': evaluation['corrected'],
             'continuation': evaluation,
         }
 
@@ -629,7 +686,7 @@ class NextTurnView(APIView):
             current.was_correct = graded['was_correct']
             current.sm2_quality = graded['quality']
             current.feedback_en = graded['feedback_en']
-            current.corrected_es = graded['corrected_es']
+            current.corrected = graded['corrected']
             current.answered_at = timezone.now()
             current.save()
 
@@ -681,7 +738,7 @@ class SessionRecapView(APIView):
             seen.add(item.pk)
             state = states.get(item.pk)
             words.append({
-                'spanish': item.spanish,
+                'term': item.term,
                 'english': item.english,
                 'was_correct': turn.was_correct,
                 'graded': turn.sm2_quality is not None,

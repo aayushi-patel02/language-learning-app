@@ -6,18 +6,23 @@ calling out at all - so a live demo never depends on someone else's uptime.
 
 Rules these turns follow, matching what the live prompt asks the model for:
 
-- Each topic runs a coherent eight-turn arc, so a full session never repeats.
-- Every `target_word` is a real `VocabItem.spanish` value from seed_vocab, so
+- Every `target_word` is a real `VocabItem.term` value from seed_vocab, so
   the SM-2 update credits the vocabulary actually on screen.
 - Exactly one reply per turn is correct, and its position varies.
-- Each wrong reply contains a concrete grammatical error - conjugation,
-  gender, ser/estar, a missing preposition or a confusable word - never merely
-  an off-topic or incomplete answer.
+- Each wrong reply contains a concrete grammatical error in that language -
+  never merely an off-topic or incomplete answer.
+
+Spanish runs a full eight-turn arc per topic, because it is the language a
+demo is most likely to be given in. The other three carry three turns per
+topic: enough that an outage does not loop immediately, without pretending a
+hand-written bank is the primary path. Falling back across languages is never
+an option, so each language stands on its own bank - a French lesson
+answering itself in Spanish would be worse than repeating.
 """
 
 import unicodedata
 
-from .models import DAILY_ROUTINE, ORDERING_FOOD, TRAVEL_BASICS
+from .models import DAILY_ROUTINE, DEFAULT_LANGUAGE, ORDERING_FOOD, TRAVEL_BASICS
 
 
 # Scaffolding for a learner who chooses to type instead of tapping: the shape
@@ -26,7 +31,7 @@ from .models import DAILY_ROUTINE, ORDERING_FOOD, TRAVEL_BASICS
 # Keys are written unaccented purely so the lookup is forgiving. The values
 # are shown to the learner as a model of correct Spanish, in an app that marks
 # a dropped accent wrong, so they carry full accents and punctuation.
-STARTERS = {
+SPANISH_STARTERS = {
     # daily routine
     'levantarse': 'Me levanto a las ____.',
     'desayunar': 'Desayuno en ____.',
@@ -56,32 +61,38 @@ STARTERS = {
     'la ayuda': 'No, gracias. Ha sido de mucha ____.',
 }
 
-def _starter_for(target):
-    """Look up a starter ignoring accents and inverted punctuation.
+def _starter_for(target, starters):
+    """Look up a starter, falling back to an accent-insensitive match.
 
-    The keys above are written unaccented so they are easy to type and hard to
-    get subtly wrong; the bank's target words are properly accented.
+    The exact key is tried first, then a flattened one. Order matters: the
+    flattening drops every non-spacing combining mark, which is exactly right
+    for a missing Spanish accent but destroys Devanagari, where the vowel
+    signs in मेज़ are combining marks carrying the word. Trying the written
+    key first means the Hindi map is keyed the way the words are actually
+    spelled, and only Latin scripts ever reach the forgiving path.
     """
-    decomposed = unicodedata.normalize('NFD', target)
+    key = target.replace('¿', '').replace('¡', '').lower().strip()
+    if key in starters:
+        return starters[key]
+
+    decomposed = unicodedata.normalize('NFD', key)
     flattened = ''.join(
         char for char in decomposed if unicodedata.category(char) != 'Mn'
     )
-    return STARTERS.get(
-        flattened.replace('¿', '').replace('¡', '').lower().strip(), ''
-    )
+    return starters.get(flattened, '')
 
 
-def _turn(target, es, en, replies):
+def _turn(target, text, en, replies):
     """Build a turn, numbering the replies so ids always match their order."""
     return {
         'target_word': target,
-        'tutor_message_es': es,
+        'tutor_message': text,
         'tutor_message_en': en,
-        'sentence_starter': _starter_for(target),
+        'sentence_starter': '',
         'replies': [
             {
                 'id': index,
-                'es': reply[0],
+                'text': reply[0],
                 'en': reply[1],
                 'is_correct': reply[2],
                 'why_wrong': reply[3] if len(reply) > 3 else '',
@@ -91,9 +102,20 @@ def _turn(target, es, en, replies):
     }
 
 
-FALLBACK_TURNS = {
+def _bank(turns, starters):
+    """Attach each turn's sentence starter from its language's starter map.
+
+    Done here rather than inside _turn() so the starter map does not have to
+    be threaded through every one of the calls below.
+    """
+    for turn in turns:
+        turn['sentence_starter'] = _starter_for(turn['target_word'], starters)
+    return turns
+
+
+SPANISH_TURNS = {
     # --- waking up through going to bed ---------------------------------
-    DAILY_ROUTINE: [
+    DAILY_ROUTINE: _bank([
         _turn(
             'levantarse',
             '¡Hola! ¿A qué hora te levantas normalmente?',
@@ -190,9 +212,9 @@ FALLBACK_TURNS = {
                 ('Me acuesto a las once.', 'I go to bed at eleven.', True),
             ],
         ),
-    ],
+    ], SPANISH_STARTERS),
     # --- sitting down through paying ------------------------------------
-    ORDERING_FOOD: [
+    ORDERING_FOOD: _bank([
         _turn(
             'la mesa',
             'Buenas tardes. ¿Una mesa para cuántas personas?',
@@ -294,9 +316,9 @@ FALLBACK_TURNS = {
                  "'cuento' means a story - you want 'cuenta'."),
             ],
         ),
-    ],
+    ], SPANISH_STARTERS),
     # --- buying a ticket through finding the hotel -----------------------
-    TRAVEL_BASICS: [
+    TRAVEL_BASICS: _bank([
         _turn(
             'el billete',
             'Buenos días. ¿Adónde va?',
@@ -405,5 +427,447 @@ FALLBACK_TURNS = {
                  "The perfect tense uses 'ha', not 'es'."),
             ],
         ),
-    ],
+    ], SPANISH_STARTERS),
+}
+
+
+FRENCH_STARTERS = {
+    'se lever': 'Je me lève à ____.',
+    'prendre le petit déjeuner': 'Je prends mon petit déjeuner ____.',
+    'le travail': 'Je vais au travail en ____.',
+    'la table': "Une table pour ____, s'il vous plaît.",
+    "l'addition": "Oui, ____ s'il vous plaît.",
+    "l'eau": "Un verre ____, s'il vous plaît.",
+    'le billet': "Un billet pour ____, s'il vous plaît.",
+    'la gare': "Où est ____, s'il vous plaît ?",
+    "l'hôtel": 'Mon hôtel est ____.',
+}
+
+FRENCH_TURNS = {
+    DAILY_ROUTINE: _bank([
+        _turn(
+            'se lever',
+            "Bonjour ! À quelle heure te lèves-tu d'habitude ?",
+            'Hello! What time do you usually get up?',
+            [
+                ('Je lève à sept heures.', 'I get up at seven.', False,
+                 "'se lever' is reflexive - it needs 'me'."),
+                ('Je me lève à sept heures.', 'I get up at seven.', True),
+                ('Je se lève à sept heures.', 'I get up at seven.', False,
+                 "With 'je' the reflexive pronoun is 'me', not 'se'."),
+            ],
+        ),
+        _turn(
+            'prendre le petit déjeuner',
+            'Et tu prends ton petit déjeuner à la maison ?',
+            'And do you have your breakfast at home?',
+            [
+                ('Oui, je prends mon petit déjeuner à la maison.',
+                 'Yes, I have my breakfast at home.', True),
+                ('Oui, je prend mon petit déjeuner à la maison.',
+                 'Yes, I have my breakfast at home.', False,
+                 "With 'je' the form is 'prends', with an s."),
+                ('Oui, je prends ma petit déjeuner à la maison.',
+                 'Yes, I have my breakfast at home.', False,
+                 "'déjeuner' is masculine, so it takes 'mon'."),
+            ],
+        ),
+        _turn(
+            'le travail',
+            'Comment vas-tu au travail ?',
+            'How do you get to work?',
+            [
+                ('Je vais à le travail en bus.', 'I go to work by bus.', False,
+                 "'à' and 'le' contract to 'au'."),
+                ('Je va au travail en bus.', 'I go to work by bus.', False,
+                 "With 'je' the form is 'vais', not 'va'."),
+                ('Je vais au travail en bus.', 'I go to work by bus.', True),
+            ],
+        ),
+    ], FRENCH_STARTERS),
+
+    ORDERING_FOOD: _bank([
+        _turn(
+            'la table',
+            'Bonsoir ! Une table pour combien de personnes ?',
+            'Good evening! A table for how many people?',
+            [
+                ("Un table pour deux, s'il vous plaît.",
+                 'A table for two, please.', False,
+                 "'table' is feminine, so it takes 'une'."),
+                ("Une table pour deux, s'il vous plaît.",
+                 'A table for two, please.', True),
+                ("Une table par deux, s'il vous plaît.",
+                 'A table for two, please.', False,
+                 "The preposition here is 'pour', not 'par'."),
+            ],
+        ),
+        _turn(
+            "l'addition",
+            'Vous avez terminé ?',
+            'Have you finished?',
+            [
+                ("Oui, le addition s'il vous plaît.", 'Yes, the bill please.',
+                 False, "'addition' is feminine and elides: l'addition."),
+                ("Oui, l'addition s'il vous plaisez.", 'Yes, the bill please.',
+                 False, "The set phrase is 's'il vous plaît'."),
+                ("Oui, l'addition s'il vous plaît.", 'Yes, the bill please.',
+                 True),
+            ],
+        ),
+        _turn(
+            "l'eau",
+            "Qu'est-ce que vous voulez boire ?",
+            'What would you like to drink?',
+            [
+                ("Un verre d'eau, s'il vous plaît.", 'A glass of water, please.',
+                 True),
+                ("Un verre de eau, s'il vous plaît.", 'A glass of water, please.',
+                 False, "'de' elides before a vowel: d'eau."),
+                ("Une verre d'eau, s'il vous plaît.", 'A glass of water, please.',
+                 False, "'verre' is masculine, so it takes 'un'."),
+            ],
+        ),
+    ], FRENCH_STARTERS),
+
+    TRAVEL_BASICS: _bank([
+        _turn(
+            'le billet',
+            'Bonjour, vous voulez aller où ?',
+            'Hello, where would you like to go?',
+            [
+                ("Une billet pour Paris, s'il vous plaît.",
+                 'A ticket to Paris, please.', False,
+                 "'billet' is masculine, so it takes 'un'."),
+                ("Un billet pour Paris, s'il vous plaît.",
+                 'A ticket to Paris, please.', True),
+                ("Un billet à Paris, s'il vous plaît.",
+                 'A ticket to Paris, please.', False,
+                 "A ticket to a place takes 'pour', not 'à'."),
+            ],
+        ),
+        _turn(
+            'la gare',
+            'Le train part dans dix minutes.',
+            'The train leaves in ten minutes.',
+            [
+                ("Où est le gare, s'il vous plaît ?",
+                 'Where is the station, please?', False,
+                 "'gare' is feminine, so it takes 'la'."),
+                ("Où sont la gare, s'il vous plaît ?",
+                 'Where is the station, please?', False,
+                 "One station is singular: 'est', not 'sont'."),
+                ("Où est la gare, s'il vous plaît ?",
+                 'Where is the station, please?', True),
+            ],
+        ),
+        _turn(
+            "l'hôtel",
+            "Votre hôtel est loin d'ici ?",
+            'Is your hotel far from here?',
+            [
+                ('Non, mon hôtel est dans le centre.',
+                 'No, my hotel is in the centre.', True),
+                ('Non, mon hôtel es dans le centre.',
+                 'No, my hotel is in the centre.', False,
+                 "The form for 'il' is 'est', not 'es'."),
+                ('Non, ma hôtel est dans le centre.',
+                 'No, my hotel is in the centre.', False,
+                 "'hôtel' is masculine, so it takes 'mon'."),
+            ],
+        ),
+    ], FRENCH_STARTERS),
+}
+
+
+GERMAN_STARTERS = {
+    'aufstehen': 'Ich stehe um ____ Uhr auf.',
+    'frühstücken': 'Ich frühstücke ____.',
+    'die arbeit': 'Ich fahre mit ____ zur Arbeit.',
+    'der tisch': 'Einen Tisch für ____, bitte.',
+    'die rechnung': 'Nein danke, ____ bitte.',
+    'das wasser': 'Ein Glas ____, bitte.',
+    'die fahrkarte': 'Eine Fahrkarte nach ____, bitte.',
+    'der bahnhof': 'Wo ist ____, bitte?',
+    'das hotel': 'Mein Hotel ist ____.',
+}
+
+GERMAN_TURNS = {
+    DAILY_ROUTINE: _bank([
+        _turn(
+            'aufstehen',
+            'Guten Morgen! Wann stehst du normalerweise auf?',
+            'Good morning! When do you usually get up?',
+            [
+                ('Ich aufstehe um sieben Uhr.', 'I get up at seven.', False,
+                 "'aufstehen' is separable - 'auf' goes to the end."),
+                ('Ich stehe um sieben Uhr auf.', 'I get up at seven.', True),
+                ('Ich stehst um sieben Uhr auf.', 'I get up at seven.', False,
+                 "'stehst' goes with 'du' - use 'stehe' for 'ich'."),
+            ],
+        ),
+        _turn(
+            'frühstücken',
+            'Und wo frühstückst du?',
+            'And where do you have breakfast?',
+            [
+                ('Ich frühstücke zu Hause.', 'I have breakfast at home.', True),
+                ('Ich frühstücken zu Hause.', 'I have breakfast at home.', False,
+                 "Conjugate it: 'frühstücke' with 'ich', not the infinitive."),
+                ('Ich frühstücke nach Hause.', 'I have breakfast at home.', False,
+                 "'nach Hause' is movement - staying somewhere is 'zu Hause'."),
+            ],
+        ),
+        _turn(
+            'die Arbeit',
+            'Wie kommst du zur Arbeit?',
+            'How do you get to work?',
+            [
+                ('Ich fahre mit den Bus zur Arbeit.', 'I go to work by bus.',
+                 False, "'mit' takes the dative: 'mit dem Bus'."),
+                ('Ich mit dem Bus zur Arbeit fahre.', 'I go to work by bus.',
+                 False, 'In a main clause the verb must come second.'),
+                ('Ich fahre mit dem Bus zur Arbeit.', 'I go to work by bus.',
+                 True),
+            ],
+        ),
+    ], GERMAN_STARTERS),
+
+    ORDERING_FOOD: _bank([
+        _turn(
+            'der Tisch',
+            'Guten Abend! Für wie viele Personen?',
+            'Good evening! For how many people?',
+            [
+                ('Ein Tisch für zwei, bitte.', 'A table for two, please.', False,
+                 "This is the object, so it takes the accusative 'einen'."),
+                ('Einen Tisch für zwei, bitten.', 'A table for two, please.',
+                 False, "'bitten' means to ask - the polite word is 'bitte'."),
+                ('Einen Tisch für zwei, bitte.', 'A table for two, please.', True),
+            ],
+        ),
+        _turn(
+            'die Rechnung',
+            'Möchten Sie noch einen Nachtisch?',
+            'Would you like a dessert as well?',
+            [
+                ('Nein danke, die Rechnung bitte.', 'No thanks, the bill please.',
+                 True),
+                ('Nein danke, der Rechnung bitte.', 'No thanks, the bill please.',
+                 False, "'Rechnung' is feminine, so it takes 'die'."),
+                ('Nein danke, ich möchte die Rechnung bekommt.',
+                 'No thanks, I would like the bill.', False,
+                 "After 'möchte' the second verb is an infinitive: 'bekommen'."),
+            ],
+        ),
+        _turn(
+            'das Wasser',
+            'Was möchten Sie trinken?',
+            'What would you like to drink?',
+            [
+                ('Eine Glas Wasser, bitte.', 'A glass of water, please.', False,
+                 "'Glas' is neuter, so it takes 'ein'."),
+                ('Ein Glas Wasser, bitte.', 'A glass of water, please.', True),
+                ('Ich möchte ein Glas Wasser trinke.',
+                 'I would like to drink a glass of water.', False,
+                 "The second verb goes to the end as an infinitive: 'trinken'."),
+            ],
+        ),
+    ], GERMAN_STARTERS),
+
+    TRAVEL_BASICS: _bank([
+        _turn(
+            'die Fahrkarte',
+            'Guten Tag, wohin möchten Sie?',
+            'Hello, where would you like to go?',
+            [
+                ('Ein Fahrkarte nach Berlin, bitte.', 'A ticket to Berlin, please.',
+                 False, "'Fahrkarte' is feminine, so it takes 'eine'."),
+                ('Eine Fahrkarte zu Berlin, bitte.', 'A ticket to Berlin, please.',
+                 False, "Cities take 'nach', not 'zu'."),
+                ('Eine Fahrkarte nach Berlin, bitte.', 'A ticket to Berlin, please.',
+                 True),
+            ],
+        ),
+        _turn(
+            'der Bahnhof',
+            'Der Zug fährt in zehn Minuten.',
+            'The train leaves in ten minutes.',
+            [
+                ('Wo ist der Bahnhof, bitte?', 'Where is the station, please?',
+                 True),
+                ('Wo ist die Bahnhof, bitte?', 'Where is the station, please?',
+                 False, "'Bahnhof' is masculine, so it takes 'der'."),
+                ('Wo der Bahnhof ist, bitte?', 'Where is the station, please?',
+                 False, 'In a question the verb comes straight after the question word.'),
+            ],
+        ),
+        _turn(
+            'das Hotel',
+            'Ist Ihr Hotel weit von hier?',
+            'Is your hotel far from here?',
+            [
+                ('Nein, meine Hotel ist im Zentrum.', 'No, my hotel is in the centre.',
+                 False, "'Hotel' is neuter, so it takes 'mein'."),
+                ('Nein, mein Hotel ist in das Zentrum.',
+                 'No, my hotel is in the centre.', False,
+                 "Being somewhere takes the dative: 'im Zentrum'."),
+                ('Nein, mein Hotel ist im Zentrum.', 'No, my hotel is in the centre.',
+                 True),
+            ],
+        ),
+    ], GERMAN_STARTERS),
+}
+
+
+# Written in Devanagari, which is what the vocabulary stores and what the
+# browser's hi-IN voice reads aloud. The prompt tells the grader to accept
+# Roman transliteration too, because a learner on a laptop has no easy way to
+# type Devanagari and refusing their answer would punish the keyboard, not
+# the Hindi.
+HINDI_STARTERS = {
+    'उठना': 'मैं ____ बजे उठता हूँ।',
+    'नाश्ता करना': 'मैं ____ नाश्ता करता हूँ।',
+    'काम': 'मैं ____ से काम पर जाता हूँ।',
+    'मेज़': '____ लोगों के लिए एक मेज़, कृपया।',
+    'बिल': 'नहीं, कृपया ____ ले आइए।',
+    'पानी': 'एक गिलास ____, कृपया।',
+    'टिकट': '____ के लिए एक टिकट, कृपया।',
+    'स्टेशन': '____ कहाँ है?',
+    'होटल': 'मेरा होटल ____ है।',
+}
+
+HINDI_TURNS = {
+    DAILY_ROUTINE: _bank([
+        _turn(
+            'उठना',
+            'नमस्ते! आप सुबह कितने बजे उठते हैं?',
+            'Hello! What time do you get up in the morning?',
+            [
+                ('मैं सात बजे उठते हूँ।', 'I get up at seven.', False,
+                 "With मैं the verb is उठता, not the plural उठते."),
+                ('मैं सात बजे उठता हूँ।', 'I get up at seven.', True),
+                ('मैं सात बजे उठता है।', 'I get up at seven.', False,
+                 "मैं takes हूँ - है belongs to वह."),
+            ],
+        ),
+        _turn(
+            'नाश्ता करना',
+            'आप नाश्ता कहाँ करते हैं?',
+            'Where do you have breakfast?',
+            [
+                ('मैं घर पर नाश्ता करना हूँ।', 'I have breakfast at home.', False,
+                 'करना is the infinitive - it needs to be करता here.'),
+                ('मैं घर को नाश्ता करता हूँ।', 'I have breakfast at home.', False,
+                 'A place takes पर or में, not को.'),
+                ('मैं घर पर नाश्ता करता हूँ।', 'I have breakfast at home.', True),
+            ],
+        ),
+        _turn(
+            'काम',
+            'आप काम पर कैसे जाते हैं?',
+            'How do you get to work?',
+            [
+                ('मैं बस से काम पर जाता हूँ।', 'I go to work by bus.', True),
+                ('मैं बस को काम पर जाता हूँ।', 'I go to work by bus.', False,
+                 'Travelling by something takes से, not को.'),
+                ('मैं बस से काम पर जाता हैं।', 'I go to work by bus.', False,
+                 'मैं takes हूँ - हैं is the plural form.'),
+            ],
+        ),
+    ], HINDI_STARTERS),
+
+    ORDERING_FOOD: _bank([
+        _turn(
+            'मेज़',
+            'नमस्ते! कितने लोगों के लिए?',
+            'Hello! For how many people?',
+            [
+                ('दो लोग के लिए एक मेज़, कृपया।', 'A table for two, please.',
+                 False, 'Before के लिए the noun goes oblique: लोगों.'),
+                ('दो लोगों को एक मेज़, कृपया।', 'A table for two, please.',
+                 False, '"For" here is के लिए, not को.'),
+                ('दो लोगों के लिए एक मेज़, कृपया।', 'A table for two, please.',
+                 True),
+            ],
+        ),
+        _turn(
+            'बिल',
+            'कुछ और चाहिए?',
+            'Would you like anything else?',
+            [
+                ('नहीं, कृपया बिल ले आइए।', 'No, please bring the bill.', True),
+                ('नहीं, कृपया बिल ले आओ।', 'No, please bring the bill.', False,
+                 'आओ is the तुम form - with कृपया use आइए.'),
+                ('नहीं, कृपया बिल को ले आइए।', 'No, please bring the bill.',
+                 False, 'An inanimate object like बिल does not take को here.'),
+            ],
+        ),
+        _turn(
+            'पानी',
+            'आप क्या पीना चाहेंगे?',
+            'What would you like to drink?',
+            [
+                ('एक गिलास पानी को, कृपया।', 'A glass of water, please.', False,
+                 'No postposition is needed after पानी here.'),
+                ('एक गिलास पानी, कृपया।', 'A glass of water, please.', True),
+                ('एक गिलास में पानी, कृपया।', 'A glass of water, please.', False,
+                 'The phrase is एक गिलास पानी - में changes the meaning.'),
+            ],
+        ),
+    ], HINDI_STARTERS),
+
+    TRAVEL_BASICS: _bank([
+        _turn(
+            'टिकट',
+            'आपको कहाँ जाना है?',
+            'Where do you need to go?',
+            [
+                ('दिल्ली के लिए एक टिकट, कृपया।', 'A ticket to Delhi, please.',
+                 True),
+                ('दिल्ली को एक टिकट, कृपया।', 'A ticket to Delhi, please.',
+                 False, 'A ticket to a place takes के लिए, not को.'),
+                ('दिल्ली के लिए एक टिकट चाहिए हूँ।', 'I need a ticket to Delhi.',
+                 False, 'चाहिए stands on its own - it does not take हूँ.'),
+            ],
+        ),
+        _turn(
+            'स्टेशन',
+            'ट्रेन दस मिनट में जाएगी।',
+            'The train leaves in ten minutes.',
+            [
+                ('स्टेशन कहाँ हैं?', 'Where is the station?', False,
+                 'One station is singular, so it takes है.'),
+                ('स्टेशन कहाँ है?', 'Where is the station?', True),
+                ('स्टेशन को कहाँ है?', 'Where is the station?', False,
+                 'The subject of है does not take को.'),
+            ],
+        ),
+        _turn(
+            'होटल',
+            'क्या आपका होटल यहाँ से दूर है?',
+            'Is your hotel far from here?',
+            [
+                ('नहीं, मेरी होटल शहर के बीच में है।',
+                 'No, my hotel is in the city centre.', False,
+                 'होटल is masculine, so it takes मेरा.'),
+                ('नहीं, मेरा होटल शहर के बीच में हैं।',
+                 'No, my hotel is in the city centre.', False,
+                 'One hotel is singular, so it takes है.'),
+                ('नहीं, मेरा होटल शहर के बीच में है।',
+                 'No, my hotel is in the city centre.', True),
+            ],
+        ),
+    ], HINDI_STARTERS),
+}
+
+
+# Keyed by language, never falling through to another one: serving Spanish
+# into a French lesson would teach the wrong thing, which is worse than
+# repeating a turn.
+FALLBACK_TURNS = {
+    'Spanish': SPANISH_TURNS,
+    'French': FRENCH_TURNS,
+    'German': GERMAN_TURNS,
+    'Hindi': HINDI_TURNS,
 }

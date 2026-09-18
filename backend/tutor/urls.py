@@ -8,6 +8,7 @@ from .auth_views import (
     SignUpView,
 )
 from .views import (
+    LanguageListView,
     NextTurnView,
     ProgressView,
     SessionRecapView,
@@ -26,6 +27,7 @@ urlpatterns = [
     path('auth/me/', MeView.as_view(), name='auth-me'),
 
     # Learning
+    path('languages/', LanguageListView.as_view(), name='language-list'),
     path('topics/', TopicListView.as_view(), name='topic-list'),
     path('progress/', ProgressView.as_view(), name='progress'),
     path('vocabulary/', VocabularyListView.as_view(), name='vocabulary-list'),

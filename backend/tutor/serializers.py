@@ -10,7 +10,7 @@ class TurnSerializer(serializers.ModelSerializer):
     `reply_options`) rather than the model's internal names.
     """
 
-    ai_message = serializers.CharField(source='tutor_message_es', read_only=True)
+    ai_message = serializers.CharField(source='tutor_message', read_only=True)
     ai_message_en = serializers.CharField(source='tutor_message_en', read_only=True)
     reply_options = serializers.SerializerMethodField()
     target_word = serializers.SerializerMethodField()
@@ -37,14 +37,14 @@ class TurnSerializer(serializers.ModelSerializer):
         return [
             {
                 'id': reply.get('id', position),
-                'es': reply.get('es', ''),
+                'text': reply.get('text', ''),
                 'en': reply.get('en', ''),
             }
             for position, reply in enumerate(turn.suggested_replies or [])
         ]
 
     def get_target_word(self, turn):
-        return turn.target_item.spanish if turn.target_item_id else ''
+        return turn.target_item.term if turn.target_item_id else ''
 
 
 class GradeSerializer(serializers.Serializer):
@@ -54,6 +54,6 @@ class GradeSerializer(serializers.Serializer):
     graded = serializers.BooleanField()
     quality = serializers.IntegerField(allow_null=True)
     feedback_en = serializers.CharField(allow_blank=True)
-    corrected_es = serializers.CharField(allow_blank=True)
+    corrected = serializers.CharField(allow_blank=True)
     interval_days = serializers.IntegerField(allow_null=True)
     due_date = serializers.DateField(allow_null=True)
