@@ -5,6 +5,7 @@ import { getTopics } from '../api'
 import { useAuth } from '../auth'
 import { TOPICS } from '../topics'
 import Chevron from './Chevron'
+import LanguagePicker from './LanguagePicker'
 import TopicIcon from './TopicIcon'
 
 export default function Home() {
@@ -17,7 +18,9 @@ export default function Home() {
     getTopics()
       .then(({ data }) => setLoads(data.topics))
       .catch(() => setLoads([])) // counts are a bonus, never a blocker
-  }, [])
+    // Keyed on the language: the counts are per language, so switching has
+    // to pull them again rather than leave the old ones on screen.
+  }, [user?.learning_language])
 
   const loadFor = (id) => loads?.find((topic) => topic.id === id)
   const totalDue = loads?.reduce((sum, topic) => sum + topic.due, 0) ?? 0
@@ -57,6 +60,10 @@ export default function Home() {
           </Link>
         </div>
       </header>
+
+      <div className="mt-4">
+        <LanguagePicker />
+      </div>
 
       {loads !== null && (
         <div
