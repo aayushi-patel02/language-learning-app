@@ -155,6 +155,51 @@ class LanguageListView(APIView):
         })
 
 
+def streak_from(active_days, today):
+    """Consecutive days of practice ending today, or zero if already broken.
+
+    Yesterday still counts while today is unfinished, so a streak does not
+    appear to reset the moment the clock rolls over.
+    """
+    streak = 0
+    cursor = today
+    if today not in active_days and (today - timedelta(days=1)) in active_days:
+        cursor = today - timedelta(days=1)
+    while cursor in active_days:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
+def practice_days(user, language):
+    """The local dates this learner answered something in this language.
+
+    Local, not UTC: the streak is compared against `timezone.localdate()`,
+    and mixing the two would end a streak early for anyone whose evening
+    practice lands on the next UTC day.
+    """
+    stamps = Turn.objects.filter(
+        session__user=user, session__language=language,
+        answered_at__isnull=False,
+    ).values_list('answered_at', flat=True)
+    return {timezone.localtime(stamp).date() for stamp in stamps}
+
+
+def next_review_after(user, language, today):
+    """When the soonest batch of words comes back, and how many."""
+    upcoming = UserVocabState.objects.filter(
+        user=user, item__language=language,
+        total_reviews__gt=0, due_date__gt=today,
+    ).order_by('due_date')
+    first = upcoming.first()
+    if first is None:
+        return None
+    return {
+        'date': first.due_date,
+        'count': upcoming.filter(due_date=first.due_date).count(),
+    }
+
+
 class TopicListView(APIView):
     """GET /api/topics/ - the three topics with each one's review load.
 
@@ -199,7 +244,13 @@ class TopicListView(APIView):
                 'scheduled': scheduled,  # known, not due yet
             })
 
-        return Response({'topics': payload})
+        return Response({
+            'topics': payload,
+            'streak': streak_from(practice_days(user, language), today),
+            # Lets the home screen say when work comes back instead of only
+            # that there is none today.
+            'next_review': next_review_after(user, language, today),
+        })
 
 
 def _word_payload(item, state):
@@ -388,18 +439,8 @@ class ProgressView(APIView):
         )
 
         # --- streak -----------------------------------------------------
-        # Any answered turn counts as practice for that day. Walking back
-        # from today rather than from the most recent day of activity, so a
-        # streak that has already been broken reads as zero.
-        active_days = {turn.answered_at.date() for turn in answered}
-        streak = 0
-        cursor = today
-        if today not in active_days and (today - timedelta(days=1)) in active_days:
-            # Yesterday still counts: the streak is alive until today ends.
-            cursor = today - timedelta(days=1)
-        while cursor in active_days:
-            streak += 1
-            cursor -= timedelta(days=1)
+        active_days = {timezone.localtime(t.answered_at).date() for t in answered}
+        streak = streak_from(active_days, today)
 
         # --- this week against last week --------------------------------
         week_start = today - timedelta(days=6)

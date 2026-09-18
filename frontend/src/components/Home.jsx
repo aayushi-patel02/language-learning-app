@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { getTopics } from '../api'
+import { formatDue } from '../dates'
 import { useAuth } from '../auth'
 import { TOPICS } from '../topics'
 import Chevron from './Chevron'
@@ -13,10 +14,16 @@ export default function Home() {
   // Null until the request lands, so the cards can render immediately and the
   // counts fill in. Avoids a spinner on the very first screen.
   const [loads, setLoads] = useState(null)
+  const [streak, setStreak] = useState(0)
+  const [nextReview, setNextReview] = useState(null)
 
   useEffect(() => {
     getTopics()
-      .then(({ data }) => setLoads(data.topics))
+      .then(({ data }) => {
+        setLoads(data.topics)
+        setStreak(data.streak ?? 0)
+        setNextReview(data.next_review ?? null)
+      })
       .catch(() => setLoads([])) // counts are a bonus, never a blocker
     // Keyed on the language: the counts are per language, so switching has
     // to pull them again rather than leave the old ones on screen.
@@ -36,19 +43,28 @@ export default function Home() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {/* A guest who already has an account has nowhere else to reach
-              one from: the welcome gate is behind them and the profile
-              offers signup, not sign-in. */}
-          {user?.is_guest && (
-            <Link
-              to="/login"
-              className="inline-flex min-h-11 items-center rounded-full border
-                         border-line bg-white px-3.5 text-xs font-bold
-                         transition-colors hover:border-learner"
-            >
-              Log in
-            </Link>
-          )}
+          {/* Same shape as the avatar beside it: a plain bordered box, so
+              the two read as one pair of controls rather than a badge
+              stuck next to a button. Shown even at zero - a language you
+              have not started should say so rather than leave a gap, and
+              it reads the same at zero as at ten rather than greying out.
+              Goes to progress, which is the only place the days behind the
+              number are. */}
+          <Link
+            to="/progress"
+            aria-label={
+              streak > 0
+                ? `${streak} day${streak === 1 ? '' : 's'} in a row. See your progress.`
+                : 'No streak yet. See your progress.'
+            }
+            className="flex h-12 shrink-0 items-center justify-center gap-1.5
+                       rounded-2xl border border-line bg-white px-3.5 text-sm
+                       font-extrabold transition-colors hover:border-ink/20"
+          >
+            <FlameIcon className="text-topic-morning" />
+            <span>{streak}</span>
+          </Link>
+
           <Link
             to="/profile"
             aria-label="Your profile"
@@ -80,8 +96,17 @@ export default function Home() {
               <span className="text-muted"> ready to review today</span>
             </p>
           ) : (
-            <p className="text-sm text-muted">
-              Nothing due today. Pick a topic to learn new words.
+            // Opening on the word "Nothing" made a finished day read as an
+            // empty one. Say what is already scheduled instead.
+            <p className="text-sm">
+              <span className="font-semibold text-learner">All caught up.</span>
+              <span className="text-muted">
+                {nextReview
+                  ? ` ${nextReview.count} ${
+                      nextReview.count === 1 ? 'word comes' : 'words come'
+                    } back ${formatDue(nextReview.date)}.`
+                  : ' Pick a topic to start learning.'}
+              </span>
             </p>
           )}
         </div>
@@ -156,5 +181,20 @@ function TopicLoad({ load, accent }) {
         <span className="font-medium text-muted">{load.new} new</span>
       )}
     </span>
+  )
+}
+
+
+function FlameIcon({ className = '' }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={`h-4 w-4 ${className}`}
+    >
+      <path d="M12.9 2.2c.2 2.3-.7 3.8-2 5.1-1.4 1.4-3.2 2.8-3.2 5.6a6.3 6.3 0 0 0 12.6 0c0-3.4-2.3-5.6-3.6-7.2-.3 1-1 1.7-1.7 2-.1-2.3-1-4.1-2.1-5.5Z" />
+      <path d="M9.4 15.6c0-1.6 1.1-2.6 1.8-3.4.6 1 1.4 1.4 2 1.7.5.6 1.2 1.1 1.2 2.1a2.5 2.5 0 0 1-5 0Z" opacity=".45" />
+    </svg>
   )
 }
