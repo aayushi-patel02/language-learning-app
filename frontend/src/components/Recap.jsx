@@ -47,7 +47,7 @@ export default function Recap() {
           ✓
         </div>
         <h1 className="mt-4 text-2xl font-bold tracking-tight">
-          ¡Lección completa!
+          Lesson complete
         </h1>
         <p className="mt-1 text-sm text-muted">{data.topic_label}</p>
       </div>
@@ -82,6 +82,11 @@ export default function Recap() {
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm">{word.term}</span>
+                {word.romanisation && (
+                  <span className="block truncate text-xs text-muted italic">
+                    {word.romanisation}
+                  </span>
+                )}
                 <span className="block truncate text-xs text-muted">
                   {word.english}
                 </span>
@@ -128,7 +133,7 @@ export default function Recap() {
 
 function Shell({ children }) {
   return (
-    <div className="app-column mx-auto min-h-full max-w-md px-5 py-8">{children}</div>
+    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-28">{children}</div>
   )
 }
 

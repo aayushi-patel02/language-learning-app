@@ -262,7 +262,7 @@ function Shell({ topic, progress, children }) {
   const percent = total ? Math.round((done / total) * 100) : 0
 
   return (
-    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 py-5">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-5 pb-28">
       <header className="mb-4 flex items-center gap-3">
         <Link
           to="/"
@@ -365,8 +365,12 @@ function Verdict({ grade }) {
     <div
       className={`animate-rise max-w-[90%] rounded-2xl rounded-tl-sm px-4 py-3 ${tone}`}
     >
+      {/* English, whatever is being learned. A verdict is the one thing the
+          learner must never be unsure of, and a beginner does not yet know
+          the target language's word for "correct" - which is also why the
+          reason and the schedule note below it are in English. */}
       <p className={`text-sm font-extrabold ${accent}`}>
-        {ungraded ? 'Skipped' : right ? '¡Correcto!' : 'Casi'}
+        {ungraded ? 'Skipped' : right ? 'Correct' : 'Not quite'}
       </p>
 
       {/* corrected means two different things: for a typed answer it is

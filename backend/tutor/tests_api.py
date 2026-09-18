@@ -721,8 +721,9 @@ class RecapTests(ApiTestCase):
         body = self.client.get(reverse('session-recap', args=[session_id])).json()
         word = body['words'][0]
         self.assertEqual(set(word), {
-            'term', 'english', 'was_correct', 'graded',
-            'due_date', 'interval_days', 'repetitions', 'ease_factor'})
+            'term', 'romanisation', 'language', 'english', 'was_correct',
+            'graded', 'due_date', 'interval_days', 'repetitions',
+            'ease_factor'})
         self.assertTrue(word['was_correct'])
         self.assertEqual(word['interval_days'], 1)
         self.assertEqual(word['repetitions'], 1)

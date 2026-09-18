@@ -739,6 +739,10 @@ class SessionRecapView(APIView):
             state = states.get(item.pk)
             words.append({
                 'term': item.term,
+                # Blank for the Latin-script languages, so the recap only
+                # shows a second line where there is one to show.
+                'romanisation': item.romanisation,
+                'language': item.language,
                 'english': item.english,
                 'was_correct': turn.was_correct,
                 'graded': turn.sm2_quality is not None,
