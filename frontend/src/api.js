@@ -33,6 +33,7 @@ export const deleteAccount = () => api.delete('/auth/me/')
 
 // Topic list with each one's review load, so the home screen can show what
 // is actually due rather than three inert links.
+export const getLanguages = () => api.get('/languages/')
 export const getTopics = () => api.get('/topics/')
 
 // Cumulative progress across every lesson, for the progress screen.

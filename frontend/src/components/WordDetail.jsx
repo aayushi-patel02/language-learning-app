@@ -56,8 +56,11 @@ export default function WordDetail() {
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-extrabold tracking-tight break-words">
-            {word.spanish}
+            {word.term}
           </h1>
+          {word.romanisation && (
+            <p className="mt-1 text-base text-muted italic">{word.romanisation}</p>
+          )}
           <p className="mt-1 text-base text-muted">{word.english}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span className="rounded-full bg-surface px-2 py-0.5 font-bold text-muted">
@@ -71,8 +74,8 @@ export default function WordDetail() {
         {canSpeak() && (
           <button
             type="button"
-            aria-label={`Hear ${word.spanish}`}
-            onClick={() => speak(word.spanish)}
+            aria-label={`Hear ${word.term}`}
+            onClick={() => speak(word.term, word.language)}
             className="btn-3d inline-flex min-h-12 min-w-12 shrink-0 items-center
                        justify-center rounded-2xl bg-learner text-white
                        hover:brightness-110"
@@ -82,18 +85,18 @@ export default function WordDetail() {
         )}
       </div>
 
-      {word.example_es && (
+      {word.example && (
         <div className="mt-6 rounded-2xl border border-line bg-white px-4 py-3.5">
           <p className="text-[11px] font-bold tracking-wide text-muted uppercase">
             In a sentence
           </p>
           <div className="mt-1.5 flex items-start gap-2">
-            <p className="flex-1 text-sm font-semibold">{word.example_es}</p>
+            <p className="flex-1 text-sm font-semibold">{word.example}</p>
             {canSpeak() && (
               <button
                 type="button"
                 aria-label="Hear the example sentence"
-                onClick={() => speak(word.example_es)}
+                onClick={() => speak(word.example, word.language)}
                 className="inline-flex min-h-11 min-w-11 shrink-0 items-center
                            justify-center rounded-xl text-muted transition
                            hover:bg-surface hover:text-ink"
@@ -158,7 +161,7 @@ export default function WordDetail() {
               key={index}
               className="rounded-2xl border border-line bg-white px-4 py-3.5"
             >
-              <p className="text-sm">{turn.tutor_message_es}</p>
+              <p className="text-sm">{turn.tutor_message}</p>
               {turn.tutor_message_en && (
                 <p className="mt-0.5 text-xs text-muted">{turn.tutor_message_en}</p>
               )}
@@ -203,7 +206,7 @@ export default function WordDetail() {
 
 function Shell({ onBack, saved, onSave, children }) {
   return (
-    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-12">
+    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-28">
       <header className="mb-5 flex items-center justify-between">
         <button
           type="button"

@@ -36,7 +36,7 @@ export default function Vocabulary() {
   const words = listFor(tab)
 
   return (
-    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-8 pb-12">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-8 pb-28">
       <header className="mb-5 flex items-center gap-3">
         <Link
           to="/"
@@ -135,8 +135,8 @@ function WordRow({ word }) {
         {speakable && (
           <button
             type="button"
-            aria-label={`Hear ${word.spanish}`}
-            onClick={() => speak(word.spanish)}
+            aria-label={`Hear ${word.term}`}
+            onClick={() => speak(word.term, word.language)}
             className="inline-flex min-h-11 min-w-11 shrink-0 items-center
                        justify-center rounded-xl text-muted transition
                        hover:bg-surface hover:text-ink"
@@ -150,7 +150,14 @@ function WordRow({ word }) {
           className="flex min-w-0 flex-1 items-center gap-3 py-2 pr-2 focus:outline-none"
         >
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-bold">{word.spanish}</span>
+            <span className="block truncate text-sm font-bold">{word.term}</span>
+            {/* Only Devanagari carries one, so this row simply does not
+                appear for the Latin-script languages. */}
+            {word.romanisation && (
+              <span className="block truncate text-xs text-muted italic">
+                {word.romanisation}
+              </span>
+            )}
             <span className="block truncate text-xs text-muted">{word.english}</span>
           </span>
           <span className="shrink-0 text-right">

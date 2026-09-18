@@ -22,12 +22,13 @@ export default function Home() {
   const totalDue = loads?.reduce((sum, topic) => sum + topic.due, 0) ?? 0
 
   return (
-    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-10 pb-12">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-10 pb-28">
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Charla</h1>
           <p className="mt-1.5 text-sm leading-relaxed text-muted">
-            Practise Spanish in conversation. What you get wrong comes back sooner.
+            Practise {user?.learning_language ?? 'a new language'} in
+            conversation. What you get wrong comes back sooner.
           </p>
         </div>
         <Link
@@ -40,25 +41,6 @@ export default function Home() {
           {user?.avatar ?? '🦉'}
         </Link>
       </header>
-
-      <nav className="mt-4 flex gap-2">
-        <Link
-          to="/vocabulary"
-          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full
-                     border border-line bg-white px-3 text-xs font-bold
-                     transition-colors hover:border-ink/20"
-        >
-          Words
-        </Link>
-        <Link
-          to="/progress"
-          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full
-                     border border-line bg-white px-3 text-xs font-bold
-                     transition-colors hover:border-ink/20"
-        >
-          Progress
-        </Link>
-      </nav>
 
       {loads !== null && (
         <div

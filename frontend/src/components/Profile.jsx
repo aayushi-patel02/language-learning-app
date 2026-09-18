@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { deleteAccount, updateMe } from '../api'
+import { deleteAccount, getLanguages, updateMe } from '../api'
 import { useAuth } from '../auth'
 
 const AVATARS = ['🦉', '🐙', '🦊', '🐢', '🦜', '🐝', '🌵', '🍋']
-const LANGUAGES = ['English', 'Spanish', 'Hindi', 'Gujarati', 'French', 'German', 'Portuguese']
 
 export default function Profile() {
   const navigate = useNavigate()
@@ -14,6 +13,17 @@ export default function Profile() {
   const [draft, setDraft] = useState(null)
   const [saved, setSaved] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  // Fetched rather than hard-coded, so this list cannot drift out of step
+  // with the vocabulary that has actually been seeded. Offering a language
+  // with no words behind it is what made the picker meaningless before.
+  const [languages, setLanguages] = useState([])
+
+  useEffect(() => {
+    getLanguages()
+      .then(({ data }) => setLanguages(data.languages))
+      .catch(() => setLanguages([]))
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -132,20 +142,31 @@ export default function Profile() {
       )}
 
       <Picker
-        label="I speak"
-        value={draft.native_language}
-        onChange={(value) => change('native_language', value)}
-      />
-      <Picker
         label="I am learning"
+        options={languages}
         value={draft.learning_language}
         onChange={(value) => change('learning_language', value)}
-        note="Charla currently teaches Spanish. Other languages are a matter of
-              seeding vocabulary, not changing the app."
+        note="Switching takes effect on your next lesson. Each language keeps
+              its own schedule, so nothing you have already learned is lost."
       />
+
+      <h2 className="mt-7 text-xs font-bold tracking-wide text-muted uppercase">
+        I speak
+      </h2>
+      <p className="mt-2 text-sm">
+        English
+        <span className="ml-2 text-xs text-muted">
+          Explanations and translations are in English.
+        </span>
+      </p>
 
       {saved && <p className="mt-4 text-xs text-success">Saved.</p>}
 
+      {/* Neither action means anything for a guest, and both are traps: there
+          are no credentials to log back in with, so either one silently
+          destroys every word they have practised. The account card above is
+          the only exit a guest is offered. */}
+      {!user.is_guest && (
       <div className="mt-8 space-y-2">
         <button
           type="button"
@@ -199,30 +220,39 @@ export default function Profile() {
           </button>
         )}
       </div>
+      )}
     </Shell>
   )
 }
 
-function Picker({ label, value, onChange, note }) {
+function Picker({ label, options, value, onChange, note }) {
   return (
     <>
       <h2 className="mt-7 text-xs font-bold tracking-wide text-muted uppercase">
         {label}
       </h2>
       <div className="mt-2.5 flex flex-wrap gap-2">
-        {LANGUAGES.map((language) => (
+        {options.map(({ code, label: name, word_count: words }) => (
           <button
-            key={language}
+            key={code}
             type="button"
-            onClick={() => onChange(language)}
-            className={`inline-flex min-h-11 items-center rounded-full border px-3.5
-                        text-xs font-bold transition-colors ${
-                          value === language
+            onClick={() => onChange(code)}
+            aria-pressed={value === code}
+            className={`inline-flex min-h-11 flex-col items-start justify-center
+                        rounded-2xl border px-3.5 py-1.5 transition-colors ${
+                          value === code
                             ? 'border-learner bg-learner text-white'
                             : 'border-line bg-white hover:border-ink/20'
                         }`}
           >
-            {language}
+            <span className="text-xs font-bold">{name}</span>
+            <span
+              className={`text-[10px] ${
+                value === code ? 'text-white/75' : 'text-muted'
+              }`}
+            >
+              {words} words
+            </span>
           </button>
         ))}
       </div>
@@ -233,7 +263,7 @@ function Picker({ label, value, onChange, note }) {
 
 function Shell({ children }) {
   return (
-    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-12">
+    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-28">
       <header className="mb-6 flex items-center gap-3">
         <Link
           to="/"

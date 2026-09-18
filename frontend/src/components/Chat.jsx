@@ -48,7 +48,7 @@ export default function Chat({ topic }) {
         setSessionId(data.session_id)
         setProgress({ answered: 0, limit: data.turn_limit })
         setMessages([
-          { kind: 'tutor', es: data.turn.ai_message, en: data.turn.ai_message_en },
+          { kind: 'tutor', text: data.turn.ai_message, en: data.turn.ai_message_en },
         ])
         setCurrent(data.turn)
         setStatus('ready')
@@ -102,7 +102,7 @@ export default function Chat({ topic }) {
   }
 
   const answerChip = (option) =>
-    submit(option.es, () => sendChip(sessionId, option.id))
+    submit(option.text, () => sendChip(sessionId, option.id))
 
   const answerFreetext = () => {
     const text = draft.trim()
@@ -121,7 +121,7 @@ export default function Chat({ topic }) {
     }
     setMessages((prev) => [
       ...prev,
-      { kind: 'tutor', es: pending.ai_message, en: pending.ai_message_en },
+      { kind: 'tutor', text: pending.ai_message, en: pending.ai_message_en },
     ])
     setCurrent(pending)
     setPending(null)
@@ -323,7 +323,7 @@ function Message({ message }) {
   if (message.kind === 'tutor') {
     return (
       <div className="animate-rise max-w-[85%] rounded-2xl rounded-tl-sm bg-tutor px-4 py-2.5">
-        <p className="text-sm">{message.es}</p>
+        <p className="text-sm">{message.text}</p>
         {message.en && <p className="mt-1 text-xs text-muted">{message.en}</p>}
       </div>
     )
@@ -369,16 +369,16 @@ function Verdict({ grade }) {
         {ungraded ? 'Skipped' : right ? '¡Correcto!' : 'Casi'}
       </p>
 
-      {/* corrected_es means two different things: for a typed answer it is
+      {/* corrected means two different things: for a typed answer it is
           that sentence fixed, for a tapped chip it is the option that was
           right - which can be a different sentence entirely. Labelling it
           stops it reading as a contradiction of the reason below. */}
-      {grade.corrected_es && (
+      {grade.corrected && (
         <>
           <p className="mt-2 text-[11px] font-bold tracking-wide text-muted uppercase">
             Correct answer
           </p>
-          <p className="text-sm font-bold">{grade.corrected_es}</p>
+          <p className="text-sm font-bold">{grade.corrected}</p>
         </>
       )}
       {grade.feedback_en && (
@@ -474,7 +474,7 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
                      disabled:opacity-40 focus:outline-none focus-visible:ring-2
                      focus-visible:ring-learner"
         >
-          <span className="block text-sm font-medium">{option.es}</span>
+          <span className="block text-sm font-medium">{option.text}</span>
           {option.en && (
             <span className="mt-0.5 block text-xs text-muted">{option.en}</span>
           )}

@@ -31,7 +31,7 @@ export default function Progress() {
   }, [])
 
   return (
-    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-8 pb-12">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-8 pb-28">
       <header className="mb-6 flex items-center gap-3">
         <Link
           to="/"
@@ -171,7 +171,7 @@ function Body({ data }) {
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold">
-                      {word.spanish}
+                      {word.term}
                     </span>
                     <span className="block truncate text-xs text-muted">
                       {word.english}

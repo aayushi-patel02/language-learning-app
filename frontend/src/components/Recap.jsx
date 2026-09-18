@@ -69,7 +69,7 @@ export default function Recap() {
       ) : (
         <ul className="mt-3 divide-y divide-line">
           {data.words.map((word) => (
-            <li key={word.spanish} className="flex items-center gap-3 py-2.5">
+            <li key={word.term} className="flex items-center gap-3 py-2.5">
               <span
                 aria-hidden="true"
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -81,7 +81,7 @@ export default function Recap() {
                 }`}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">{word.spanish}</span>
+                <span className="block truncate text-sm">{word.term}</span>
                 <span className="block truncate text-xs text-muted">
                   {word.english}
                 </span>
