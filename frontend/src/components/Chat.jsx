@@ -197,9 +197,9 @@ export default function Chat({ topic }) {
         <button
           type="button"
           onClick={() => navigate(`/recap/${sessionId}`)}
-          className="btn min-h-12 w-full rounded-2xl bg-ink px-4 py-3 text-sm
+          className="btn min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
                      font-extrabold tracking-wide text-white uppercase
-                     hover:brightness-125"
+                     hover:brightness-110"
         >
           See your results
         </button>
