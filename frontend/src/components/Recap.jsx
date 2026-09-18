@@ -42,12 +42,12 @@ export default function Recap() {
         <div
           aria-hidden="true"
           className="mx-auto flex h-16 w-16 items-center justify-center rounded-full
-                     bg-success-soft text-3xl text-success"
+                     bg-learner-soft text-3xl text-learner"
         >
           ✓
         </div>
         <h1 className="mt-4 text-2xl font-bold tracking-tight">
-          ¡Lección completa!
+          Lesson complete
         </h1>
         <p className="mt-1 text-sm text-muted">{data.topic_label}</p>
       </div>
@@ -69,7 +69,7 @@ export default function Recap() {
       ) : (
         <ul className="mt-3 divide-y divide-line">
           {data.words.map((word) => (
-            <li key={word.spanish} className="flex items-center gap-3 py-2.5">
+            <li key={word.term} className="flex items-center gap-3 py-2.5">
               <span
                 aria-hidden="true"
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -81,7 +81,12 @@ export default function Recap() {
                 }`}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">{word.spanish}</span>
+                <span className="block truncate text-sm">{word.term}</span>
+                {word.romanisation && (
+                  <span className="block truncate text-xs text-muted italic">
+                    {word.romanisation}
+                  </span>
+                )}
                 <span className="block truncate text-xs text-muted">
                   {word.english}
                 </span>
@@ -99,25 +104,28 @@ export default function Recap() {
         </ul>
       )}
 
+      {/* The mechanic, not the algorithm's name. This is the moment right
+          after finishing a lesson; someone who wants the detail finds it on
+          a word's own page, next to that word's actual numbers. */}
       <p className="mt-6 text-xs leading-relaxed text-muted">
-        Review dates come from SM-2. A word you got wrong resets to a one-day
-        interval; each correct answer pushes it further out.
+        Get a word right and it comes back a little later each time. Get one
+        wrong and it comes back tomorrow.
       </p>
 
       <div className="mt-8 space-y-2 pb-4">
         <Link
           to={`/chat/${data.topic}`}
-          className="btn-3d flex min-h-12 items-center justify-center rounded-2xl
-                     bg-success px-4 py-3 text-sm font-extrabold tracking-wide
+          className="btn flex min-h-12 items-center justify-center rounded-2xl
+                     bg-learner px-4 py-3 text-sm font-extrabold tracking-wide
                      text-white uppercase hover:brightness-110"
         >
           Next lesson
         </Link>
         <Link
           to="/"
-          className="btn-3d flex min-h-12 items-center justify-center rounded-2xl
-                     border-2 border-line bg-white px-4 py-3 text-sm font-extrabold
-                     tracking-wide uppercase hover:bg-surface"
+          className="btn flex min-h-12 items-center justify-center rounded-2xl
+                     border border-line bg-white px-4 py-3 text-sm font-extrabold
+                     tracking-wide uppercase transition-colors hover:border-learner"
         >
           Back to topics
         </Link>
@@ -128,7 +136,7 @@ export default function Recap() {
 
 function Shell({ children }) {
   return (
-    <div className="app-column mx-auto min-h-full max-w-md px-5 py-8">{children}</div>
+    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-28">{children}</div>
   )
 }
 

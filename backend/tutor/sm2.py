@@ -193,15 +193,24 @@ def quality_for_freetext(verdict):
 
 # --- session scheduling ----------------------------------------------------
 
-def ensure_states(user, topic=None):
+def ensure_states(user, topic=None, language=None):
     """Make sure `user` has a UserVocabState row for every item in `topic`.
 
     Returns a queryset of those states. New vocab added later is picked up the
     next time a session starts.
+
+    `language` matters more than it looks. Without it a learner studying
+    Spanish would be given a scheduling row for all 240 items, so their
+    vocabulary library would fill with German they have never seen and the
+    scheduler could pick a Hindi word for a Spanish lesson. Callers inside the
+    app always pass it; it stays optional so a test can ask about every
+    language at once.
     """
     from .models import UserVocabState, VocabItem
 
     items = VocabItem.objects.all()
+    if language:
+        items = items.filter(language=language)
     if topic:
         items = items.filter(topic=topic)
 
@@ -220,8 +229,11 @@ def ensure_states(user, topic=None):
     return UserVocabState.objects.filter(user=user, item__in=items)
 
 
-def select_session_items(user, topic, limit=None):
+def select_session_items(user, topic, limit=None, language=None, first_item=None):
     """Choose the vocab for one practice session, in the order to drill it.
+
+    Scoped to one `language`: a Spanish lesson must never be handed a German
+    word, however overdue that word is.
 
     Priority:
       1. Due or overdue items, oldest due date first, and among items due the
@@ -230,11 +242,16 @@ def select_session_items(user, topic, limit=None):
          gently.
       3. Items not due yet, nearest due date first - only reached when the
          learner has cleared everything and wants to keep going.
+
+    `first_item` overrides all of that for one word, moving it to the head of
+    the plan. It is what makes "practise this word" honest: a hard word sorts
+    behind every easier one, so a learner who asked for it by name would
+    otherwise never reach it inside a session's turn limit.
     """
     if limit is None:
         limit = settings.SESSION_TURN_LIMIT
 
-    states = list(ensure_states(user, topic).select_related('item'))
+    states = list(ensure_states(user, topic, language).select_related('item'))
     today = timezone.localdate()
 
     due, unseen, upcoming = [], [], []
@@ -247,7 +264,14 @@ def select_session_items(user, topic, limit=None):
             upcoming.append(state)
 
     due.sort(key=lambda s: (s.due_date, s.ease_factor))
-    unseen.sort(key=lambda s: (s.item.difficulty, s.item.spanish))
+    unseen.sort(key=lambda s: (s.item.difficulty, s.item.term))
     upcoming.sort(key=lambda s: s.due_date)
 
-    return [state.item for state in (due + unseen + upcoming)[:limit]]
+    items = [state.item for state in due + unseen + upcoming]
+
+    if first_item is not None:
+        # Pulled out and put back at the front, so asking for a word neither
+        # duplicates it nor lengthens the session.
+        items = [first_item] + [i for i in items if i.pk != first_item.pk]
+
+    return items[:limit]

@@ -33,6 +33,7 @@ export const deleteAccount = () => api.delete('/auth/me/')
 
 // Topic list with each one's review load, so the home screen can show what
 // is actually due rather than three inert links.
+export const getLanguages = () => api.get('/languages/')
 export const getTopics = () => api.get('/topics/')
 
 // Cumulative progress across every lesson, for the progress screen.
@@ -44,7 +45,10 @@ export const getWord = (id) => api.get(`/vocabulary/${id}/`)
 export const setWordSaved = (id, isSaved) =>
   api.post(`/vocabulary/${id}/`, { is_saved: isSaved })
 
-export const startSession = (topic) => api.post('/sessions/start/', { topic })
+// `wordId` asks the scheduler to lead with one particular word, which is
+// what the practise button on a word's own page sends.
+export const startSession = (topic, wordId) =>
+  api.post('/sessions/start/', wordId ? { topic, word_id: wordId } : { topic })
 
 // Chips are identified by id, not by their text: the backend holds the answer
 // key and decides whether the tap was right. Sending the text back would let

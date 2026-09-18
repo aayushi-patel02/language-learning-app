@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { sendChip, sendFreetext, startSession } from '../api'
 import { formatDue } from '../dates'
@@ -38,17 +38,22 @@ export default function Chat({ topic }) {
   // page load would open two sessions and burn two LLM calls.
   const startedFor = useRef(null)
 
+  // Set when the learner arrived from a word's own page, asking for that
+  // word specifically.
+  const [searchParams] = useSearchParams()
+  const focusWordId = searchParams.get('word')
+
   useEffect(() => {
     if (startedFor.current === topic) return
     startedFor.current = topic
 
     setStatus('loading')
-    startSession(topic)
+    startSession(topic, focusWordId)
       .then(({ data }) => {
         setSessionId(data.session_id)
         setProgress({ answered: 0, limit: data.turn_limit })
         setMessages([
-          { kind: 'tutor', es: data.turn.ai_message, en: data.turn.ai_message_en },
+          { kind: 'tutor', text: data.turn.ai_message, en: data.turn.ai_message_en },
         ])
         setCurrent(data.turn)
         setStatus('ready')
@@ -102,7 +107,7 @@ export default function Chat({ topic }) {
   }
 
   const answerChip = (option) =>
-    submit(option.es, () => sendChip(sessionId, option.id))
+    submit(option.text, () => sendChip(sessionId, option.id))
 
   const answerFreetext = () => {
     const text = draft.trim()
@@ -121,7 +126,7 @@ export default function Chat({ topic }) {
     }
     setMessages((prev) => [
       ...prev,
-      { kind: 'tutor', es: pending.ai_message, en: pending.ai_message_en },
+      { kind: 'tutor', text: pending.ai_message, en: pending.ai_message_en },
     ])
     setCurrent(pending)
     setPending(null)
@@ -176,15 +181,13 @@ export default function Chat({ topic }) {
           type="button"
           autoFocus
           onClick={advance}
-          className={`btn-3d min-h-12 w-full rounded-2xl px-4 py-3 text-sm
-                      font-extrabold tracking-wide text-white uppercase
-                      hover:brightness-110 ${
-                        !feedback.graded
-                          ? 'bg-ink'
-                          : feedback.was_correct
-                            ? 'bg-success'
-                            : 'bg-error'
-                      }`}
+          // One colour whatever the verdict was. The bubble directly above
+          // already says whether the answer was right; recolouring the way
+          // forward as well made the primary action change under the
+          // learner turn by turn for no added information.
+          className="btn min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
+                     font-extrabold tracking-wide text-white uppercase
+                     hover:brightness-110"
         >
           {pending ? 'Continue' : 'Finish lesson'}
         </button>
@@ -194,9 +197,9 @@ export default function Chat({ topic }) {
         <button
           type="button"
           onClick={() => navigate(`/recap/${sessionId}`)}
-          className="btn-3d min-h-12 w-full rounded-2xl bg-ink px-4 py-3 text-sm
+          className="btn min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
                      font-extrabold tracking-wide text-white uppercase
-                     hover:brightness-125"
+                     hover:brightness-110"
         >
           See your results
         </button>
@@ -262,15 +265,16 @@ function Shell({ topic, progress, children }) {
   const percent = total ? Math.round((done / total) * 100) : 0
 
   return (
-    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 py-5">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-5 pb-28">
       <header className="mb-4 flex items-center gap-3">
         <Link
           to="/"
           aria-label="Leave this lesson"
-          className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
-                     text-lg text-muted transition hover:text-ink"
+          className="-ml-1 inline-flex h-11 w-11 shrink-0 items-center justify-center
+                     rounded-full text-muted transition-colors hover:bg-surface
+                     hover:text-ink"
         >
-          &times;
+          <CloseIcon />
         </Link>
         {total > 0 ? (
           <div
@@ -282,7 +286,7 @@ function Shell({ topic, progress, children }) {
             className="h-3 flex-1 overflow-hidden rounded-full bg-line"
           >
             <div
-              className="h-full rounded-full bg-success transition-[width] duration-500
+              className="h-full rounded-full bg-learner transition-[width] duration-500
                          ease-out"
               style={{ width: `${percent}%` }}
             />
@@ -323,7 +327,7 @@ function Message({ message }) {
   if (message.kind === 'tutor') {
     return (
       <div className="animate-rise max-w-[85%] rounded-2xl rounded-tl-sm bg-tutor px-4 py-2.5">
-        <p className="text-sm">{message.es}</p>
+        <p className="text-sm">{message.text}</p>
         {message.en && <p className="mt-1 text-xs text-muted">{message.en}</p>}
       </div>
     )
@@ -365,20 +369,24 @@ function Verdict({ grade }) {
     <div
       className={`animate-rise max-w-[90%] rounded-2xl rounded-tl-sm px-4 py-3 ${tone}`}
     >
+      {/* English, whatever is being learned. A verdict is the one thing the
+          learner must never be unsure of, and a beginner does not yet know
+          the target language's word for "correct" - which is also why the
+          reason and the schedule note below it are in English. */}
       <p className={`text-sm font-extrabold ${accent}`}>
-        {ungraded ? 'Skipped' : right ? '¡Correcto!' : 'Casi'}
+        {ungraded ? 'Skipped' : right ? 'Correct' : 'Not quite'}
       </p>
 
-      {/* corrected_es means two different things: for a typed answer it is
+      {/* corrected means two different things: for a typed answer it is
           that sentence fixed, for a tapped chip it is the option that was
           right - which can be a different sentence entirely. Labelling it
           stops it reading as a contradiction of the reason below. */}
-      {grade.corrected_es && (
+      {grade.corrected && (
         <>
           <p className="mt-2 text-[11px] font-bold tracking-wide text-muted uppercase">
             Correct answer
           </p>
-          <p className="text-sm font-bold">{grade.corrected_es}</p>
+          <p className="text-sm font-bold">{grade.corrected}</p>
         </>
       )}
       {grade.feedback_en && (
@@ -450,7 +458,7 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
             type="button"
             onClick={onSend}
             disabled={disabled || !draft.trim()}
-            className="btn-3d min-h-11 rounded-xl bg-learner px-4 py-2 text-sm
+            className="btn min-h-11 rounded-xl bg-learner px-4 py-2 text-sm
                        font-bold text-white hover:brightness-110
                        disabled:opacity-40"
           >
@@ -469,12 +477,12 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
           type="button"
           onClick={() => onChip(option)}
           disabled={disabled}
-          className="btn-3d w-full rounded-2xl border-2 border-line bg-white px-4 py-3
-                     text-left hover:border-learner/40 hover:bg-surface
+          className="btn w-full rounded-2xl border border-line bg-white px-4 py-3
+                     text-left transition-colors hover:border-learner
                      disabled:opacity-40 focus:outline-none focus-visible:ring-2
                      focus-visible:ring-learner"
         >
-          <span className="block text-sm font-medium">{option.es}</span>
+          <span className="block text-sm font-medium">{option.text}</span>
           {option.en && (
             <span className="mt-0.5 block text-xs text-muted">{option.en}</span>
           )}
@@ -482,5 +490,24 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
       ))}
 
     </div>
+  )
+}
+
+
+// A stroked cross rather than the × character, which renders thin, sits
+// slightly high in its box and reads as punctuation next to the progress bar.
+function CloseIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      aria-hidden="true"
+      className="h-5 w-5"
+    >
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
   )
 }

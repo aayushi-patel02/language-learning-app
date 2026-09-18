@@ -5,10 +5,10 @@ from .models import ConversationSession, Turn, UserVocabState, VocabItem
 
 @admin.register(VocabItem)
 class VocabItemAdmin(admin.ModelAdmin):
-    list_display = ['spanish', 'english', 'topic', 'difficulty', 'part_of_speech']
+    list_display = ['term', 'english', 'topic', 'difficulty', 'part_of_speech']
     list_filter = ['topic', 'difficulty', 'part_of_speech']
-    search_fields = ['spanish', 'english']
-    ordering = ['topic', 'difficulty', 'spanish']
+    search_fields = ['term', 'english']
+    ordering = ['topic', 'difficulty', 'term']
 
 
 @admin.register(UserVocabState)
@@ -25,7 +25,7 @@ class UserVocabStateAdmin(admin.ModelAdmin):
         'lapses',
     ]
     list_filter = ['user', 'due_date', 'item__topic']
-    search_fields = ['item__spanish', 'item__english']
+    search_fields = ['item__term', 'item__english']
     autocomplete_fields = ['item']
     readonly_fields = ['last_reviewed_at']
 
@@ -35,7 +35,7 @@ class TurnInline(admin.TabularInline):
     extra = 0
     fields = [
         'index',
-        'tutor_message_es',
+        'tutor_message',
         'target_item',
         'user_reply',
         'reply_mode',
@@ -70,5 +70,5 @@ class TurnAdmin(admin.ModelAdmin):
         'from_cache',
     ]
     list_filter = ['reply_mode', 'was_correct', 'from_cache', 'llm_provider']
-    search_fields = ['tutor_message_es', 'user_reply']
+    search_fields = ['tutor_message', 'user_reply']
     autocomplete_fields = ['target_item']

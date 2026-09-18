@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getWord, setWordSaved } from '../api'
 import { formatDue } from '../dates'
 import { canSpeak, speak } from '../speech'
+import Chevron from './Chevron'
 
 const SHELF_LABEL = {
   due: 'Ready to review',
@@ -56,8 +57,11 @@ export default function WordDetail() {
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-extrabold tracking-tight break-words">
-            {word.spanish}
+            {word.term}
           </h1>
+          {word.romanisation && (
+            <p className="mt-1 text-base text-muted italic">{word.romanisation}</p>
+          )}
           <p className="mt-1 text-base text-muted">{word.english}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span className="rounded-full bg-surface px-2 py-0.5 font-bold text-muted">
@@ -71,9 +75,9 @@ export default function WordDetail() {
         {canSpeak() && (
           <button
             type="button"
-            aria-label={`Hear ${word.spanish}`}
-            onClick={() => speak(word.spanish)}
-            className="btn-3d inline-flex min-h-12 min-w-12 shrink-0 items-center
+            aria-label={`Hear ${word.term}`}
+            onClick={() => speak(word.term, word.language)}
+            className="btn inline-flex min-h-12 min-w-12 shrink-0 items-center
                        justify-center rounded-2xl bg-learner text-white
                        hover:brightness-110"
           >
@@ -82,18 +86,18 @@ export default function WordDetail() {
         )}
       </div>
 
-      {word.example_es && (
+      {word.example && (
         <div className="mt-6 rounded-2xl border border-line bg-white px-4 py-3.5">
           <p className="text-[11px] font-bold tracking-wide text-muted uppercase">
             In a sentence
           </p>
           <div className="mt-1.5 flex items-start gap-2">
-            <p className="flex-1 text-sm font-semibold">{word.example_es}</p>
+            <p className="flex-1 text-sm font-semibold">{word.example}</p>
             {canSpeak() && (
               <button
                 type="button"
                 aria-label="Hear the example sentence"
-                onClick={() => speak(word.example_es)}
+                onClick={() => speak(word.example, word.language)}
                 className="inline-flex min-h-11 min-w-11 shrink-0 items-center
                            justify-center rounded-xl text-muted transition
                            hover:bg-surface hover:text-ink"
@@ -113,7 +117,7 @@ export default function WordDetail() {
         <Fact
           value={SHELF_LABEL[word.shelf] ?? word.shelf}
           label="Mastery level"
-          tone={word.shelf === 'mastered' ? 'text-success' : ''}
+          tone={word.shelf === 'mastered' ? 'text-learner' : ''}
         />
         <Fact
           value={word.due_date ? formatDue(word.due_date) : 'not scheduled'}
@@ -143,6 +147,15 @@ export default function WordDetail() {
         </p>
       )}
 
+      {/* Named here rather than on the recap: this is the screen someone
+          opens when they want to know why a date is what it is, and the
+          numbers it explains are right above it. */}
+      <p className="mt-2.5 text-xs leading-relaxed text-muted">
+        These dates come from SM-2, a spaced repetition algorithm. Each
+        correct answer multiplies the gap before you see this word again;
+        getting it wrong sends the gap back to one day.
+      </p>
+
       <h2 className="mt-7 text-xs font-bold tracking-wide text-muted uppercase">
         Where you met it
       </h2>
@@ -158,7 +171,7 @@ export default function WordDetail() {
               key={index}
               className="rounded-2xl border border-line bg-white px-4 py-3.5"
             >
-              <p className="text-sm">{turn.tutor_message_es}</p>
+              <p className="text-sm">{turn.tutor_message}</p>
               {turn.tutor_message_en && (
                 <p className="mt-0.5 text-xs text-muted">{turn.tutor_message_en}</p>
               )}
@@ -189,13 +202,17 @@ export default function WordDetail() {
         </ul>
       )}
 
+      {/* Carries the word id, so the lesson opens on this word rather than
+          wherever the scheduler would have reached on its own. A hard word
+          sorts behind every easier one, so without this the learner could
+          never get to the word they just asked for. */}
       <Link
-        to={`/chat/${word.topic}`}
-        className="btn-3d mt-8 flex min-h-12 items-center justify-center rounded-2xl
+        to={`/chat/${word.topic}?word=${word.id}`}
+        className="btn mt-8 flex min-h-12 items-center justify-center rounded-2xl
                    bg-learner px-4 py-3 text-sm font-extrabold tracking-wide
                    text-white uppercase hover:brightness-110"
       >
-        Practise this topic
+        Practise this word
       </Link>
     </Shell>
   )
@@ -203,7 +220,7 @@ export default function WordDetail() {
 
 function Shell({ onBack, saved, onSave, children }) {
   return (
-    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-12">
+    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-28">
       <header className="mb-5 flex items-center justify-between">
         <button
           type="button"
@@ -212,7 +229,7 @@ function Shell({ onBack, saved, onSave, children }) {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </button>
         {onSave && (
           <button
@@ -223,7 +240,7 @@ function Shell({ onBack, saved, onSave, children }) {
                         px-3 text-xs font-bold transition-colors ${
                           saved
                             ? 'border-learner bg-learner text-white'
-                            : 'border-line bg-white text-muted hover:border-ink/20'
+                            : 'border-line bg-white text-muted hover:border-learner'
                         }`}
           >
             <BookmarkIcon filled={saved} />
@@ -269,13 +286,19 @@ function BookmarkIcon({ filled }) {
       viewBox="0 0 24 24"
       fill={filled ? 'currentColor' : 'none'}
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="1.9"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className="h-3.5 w-3.5"
+      className="h-4 w-4"
     >
-      <path d="M6 3h12v18l-6-5-6 5V3Z" />
+      {/* Rounded corners and a shallower notch. The old path was a bare
+          rectangle with a deep V cut out of it, which at 14px read as an
+          arrow pointing down rather than a bookmark. */}
+      <path
+        d="M6.75 3.75h10.5a.9.9 0 0 1 .9.9v14.9a.7.7 0 0 1-1.11.57L12 16.4
+           l-5.04 3.72a.7.7 0 0 1-1.11-.57V4.65a.9.9 0 0 1 .9-.9Z"
+      />
     </svg>
   )
 }

@@ -255,7 +255,11 @@ LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'gemini')
 DEMO_MODE = env_bool('DEMO_MODE', False)
 
 # How many exchanges a practice session runs for before the recap screen.
-SESSION_TURN_LIMIT = int(os.getenv('SESSION_TURN_LIMIT', '8'))
+# Five rather than eight: a lesson short enough to finish in a spare couple
+# of minutes is one that actually gets done daily, and daily is what spaced
+# repetition needs far more than it needs long sessions. Eight exchanges
+# about breakfast also stopped feeling like a conversation.
+SESSION_TURN_LIMIT = int(os.getenv('SESSION_TURN_LIMIT', '5'))
 
 # Username of the pre-seeded demo learner used instead of real signup/login.
 DEMO_USERNAME = os.getenv('DEMO_USERNAME', 'demo')

@@ -20,6 +20,21 @@ export default function SignUp() {
 
   const submit = async (event) => {
     event.preventDefault()
+
+    // Named here rather than at the server, so an empty box is called out
+    // the instant it is submitted instead of after a round trip.
+    const missing = [
+      ['name', form.name.trim(), 'Please enter your name.'],
+      ['email', form.email.trim(), 'Please enter your email address.'],
+      ['password', form.password, 'Please enter a password.'],
+    ].find(([, value]) => !value)
+
+    if (missing) {
+      setError(missing[2])
+      setField(missing[0])
+      return
+    }
+
     setBusy(true)
     setError('')
     setField('')
@@ -91,6 +106,16 @@ export default function SignUp() {
         {error && (
           <p className="mt-3 rounded-xl bg-error-soft px-3 py-2 text-xs text-error">
             {error}
+            {/* A taken email means they already have an account, so offer the
+                way in rather than leaving them to retype a new address. */}
+            {field === 'email' && error.includes('already') && (
+              <>
+                {' '}
+                <Link to="/login" className="font-bold underline">
+                  Log in instead
+                </Link>
+              </>
+            )}
           </p>
         )}
 

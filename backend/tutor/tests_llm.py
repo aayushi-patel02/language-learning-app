@@ -12,17 +12,17 @@ from unittest import mock
 from django.test import TestCase, override_settings
 
 from . import llm
-from .models import DAILY_ROUTINE, ORDERING_FOOD, TRAVEL_BASICS
+from .models import DAILY_ROUTINE, LANGUAGES, ORDERING_FOOD, TRAVEL_BASICS
 
 GOOD_TURN = {
-    'tutor_message_es': '¿A qué hora te levantas?',
+    'tutor_message': '¿A qué hora te levantas?',
     'tutor_message_en': 'What time do you get up?',
     'target_word': 'levantarse',
     'replies': [
-        {'es': 'Me levanto a las siete.', 'en': 'I get up at seven.', 'is_correct': True},
-        {'es': 'Yo levanto a las siete.', 'en': 'I get up at seven.',
+        {'text': 'Me levanto a las siete.', 'en': 'I get up at seven.', 'is_correct': True},
+        {'text': 'Yo levanto a las siete.', 'en': 'I get up at seven.',
          'is_correct': False, 'why_wrong': 'needs the reflexive pronoun'},
-        {'es': 'Me levanta a las siete.', 'en': 'I get up at seven.',
+        {'text': 'Me levanta a las siete.', 'en': 'I get up at seven.',
          'is_correct': False, 'why_wrong': 'wrong person'},
     ],
 }
@@ -30,9 +30,9 @@ GOOD_TURN = {
 GOOD_EVAL = {
     'verdict': 'minor',
     'used_target_word': True,
-    'corrected_es': 'Me levanto a las siete.',
+    'corrected': 'Me levanto a las siete.',
     'feedback_en': 'Almost - just add the accent.',
-    'tutor_message_es': '¿Y desayunas en casa?',
+    'tutor_message': '¿Y desayunas en casa?',
     'tutor_message_en': 'And do you have breakfast at home?',
     'replies': GOOD_TURN['replies'],
 }
@@ -100,7 +100,7 @@ class ExtractJsonTests(TestCase):
 
     def test_truncated_json_raises(self):
         with self.assertRaises(llm.LLMError):
-            llm._extract_json('{"tutor_message_es": "hola", "replies": [')
+            llm._extract_json('{"tutor_message": "hola", "replies": [')
 
 
 class NormaliseRepliesTests(TestCase):
@@ -119,35 +119,35 @@ class NormaliseRepliesTests(TestCase):
     def test_single_reply_sent_unwrapped_as_dict(self):
         with self.assertRaises(llm.LLMError):
             # One chip is not enough for a choice, even if well-formed.
-            llm._normalise_replies({'es': 'Me levanto.', 'is_correct': True})
+            llm._normalise_replies({'text': 'Me levanto.', 'is_correct': True})
 
     def test_alternate_field_names_are_accepted(self):
         chips = llm._normalise_replies([
-            {'spanish': 'Me levanto.', 'english': 'I get up.', 'is_correct': True},
-            {'spanish': 'Yo levanto.', 'english': 'I get up.', 'is_correct': False},
+            {'term': 'Me levanto.', 'english': 'I get up.', 'is_correct': True},
+            {'term': 'Yo levanto.', 'english': 'I get up.', 'is_correct': False},
         ])
-        self.assertEqual(chips[0]['es'], 'Me levanto.')
+        self.assertEqual(chips[0]['text'], 'Me levanto.')
         self.assertEqual(chips[0]['en'], 'I get up.')
 
-    def test_entries_without_spanish_are_dropped(self):
+    def test_entries_without_term_are_dropped(self):
         chips = llm._normalise_replies([
-            {'es': 'Me levanto.', 'is_correct': True},
-            {'es': '', 'is_correct': False},
-            {'en': 'no spanish here', 'is_correct': False},
-            {'es': 'Yo levanto.', 'is_correct': False},
+            {'text': 'Me levanto.', 'is_correct': True},
+            {'text': '', 'is_correct': False},
+            {'en': 'no term here', 'is_correct': False},
+            {'text': 'Yo levanto.', 'is_correct': False},
         ])
         self.assertEqual(len(chips), 2)
 
     def test_more_than_three_replies_are_trimmed(self):
         chips = llm._normalise_replies([
-            {'es': f'Opción {i}.', 'is_correct': i == 0} for i in range(6)
+            {'text': f'Opción {i}.', 'is_correct': i == 0} for i in range(6)
         ])
         self.assertEqual(len(chips), 3)
 
     def test_truthy_is_correct_values_are_coerced(self):
         chips = llm._normalise_replies([
-            {'es': 'Sí.', 'is_correct': 'true'},
-            {'es': 'No.', 'is_correct': 0},
+            {'text': 'Sí.', 'is_correct': 'true'},
+            {'text': 'No.', 'is_correct': 0},
         ])
         self.assertTrue(chips[0]['is_correct'])
         self.assertFalse(chips[1]['is_correct'])
@@ -155,8 +155,8 @@ class NormaliseRepliesTests(TestCase):
     def test_no_correct_reply_raises(self):
         with self.assertRaises(llm.LLMError):
             llm._normalise_replies([
-                {'es': 'Uno.', 'is_correct': False},
-                {'es': 'Dos.', 'is_correct': False},
+                {'text': 'Uno.', 'is_correct': False},
+                {'text': 'Dos.', 'is_correct': False},
             ])
 
     def test_non_list_raises(self):
@@ -171,7 +171,7 @@ class GetNextTurnTests(TestCase):
     def test_well_formed_response_is_used(self):
         with stub(json.dumps(GOOD_TURN)):
             turn = llm.get_next_turn(DAILY_ROUTINE)
-        self.assertEqual(turn['tutor_message_es'], '¿A qué hora te levantas?')
+        self.assertEqual(turn['tutor_message'], '¿A qué hora te levantas?')
         self.assertEqual(turn['provider'], 'deepseek')
         self.assertFalse(turn['from_cache'])
         self.assertEqual(len(turn['replies']), 3)
@@ -187,7 +187,7 @@ class GetNextTurnTests(TestCase):
         self.assertEqual(turn['provider'], 'fallback')
         self.assertTrue(turn['from_cache'])
         # Still a usable turn, not an error dict.
-        self.assertTrue(turn['tutor_message_es'])
+        self.assertTrue(turn['tutor_message'])
         self.assertGreaterEqual(len(turn['replies']), 2)
 
     def test_garbage_response_falls_back(self):
@@ -196,7 +196,7 @@ class GetNextTurnTests(TestCase):
                 with stub(raw):
                     turn = llm.get_next_turn(TRAVEL_BASICS)
                 self.assertEqual(turn['provider'], 'fallback')
-                self.assertTrue(turn['tutor_message_es'])
+                self.assertTrue(turn['tutor_message'])
 
     def test_response_missing_tutor_message_falls_back(self):
         with stub(json.dumps({'replies': GOOD_TURN['replies']})):
@@ -205,8 +205,8 @@ class GetNextTurnTests(TestCase):
 
     def test_response_with_no_correct_reply_falls_back(self):
         payload = dict(GOOD_TURN, replies=[
-            {'es': 'Uno.', 'is_correct': False},
-            {'es': 'Dos.', 'is_correct': False},
+            {'text': 'Uno.', 'is_correct': False},
+            {'text': 'Dos.', 'is_correct': False},
         ])
         with stub(json.dumps(payload)):
             turn = llm.get_next_turn(DAILY_ROUTINE)
@@ -216,12 +216,12 @@ class GetNextTurnTests(TestCase):
         with raising_stub(RuntimeError('boom')):
             food = llm.get_next_turn(ORDERING_FOOD, turn_index=0)
             travel = llm.get_next_turn(TRAVEL_BASICS, turn_index=0)
-        self.assertNotEqual(food['tutor_message_es'], travel['tutor_message_es'])
+        self.assertNotEqual(food['tutor_message'], travel['tutor_message'])
 
     def test_unknown_topic_still_returns_a_turn(self):
         with raising_stub(RuntimeError('boom')):
             turn = llm.get_next_turn('not_a_real_topic')
-        self.assertTrue(turn['tutor_message_es'])
+        self.assertTrue(turn['tutor_message'])
 
     def test_history_and_vocab_reach_the_prompt(self):
         seen = {}
@@ -234,7 +234,7 @@ class GetNextTurnTests(TestCase):
         with mock.patch.object(llm, 'PROVIDERS', {'deepseek': _capture}):
             llm.get_next_turn(
                 ORDERING_FOOD,
-                due_items=[{'spanish': 'la cuenta', 'english': 'the bill'}],
+                due_items=[{'term': 'la cuenta', 'english': 'the bill'}],
                 history=[{'tutor': 'Hola.', 'user': 'Hola.'}],
             )
         self.assertIn('la cuenta', seen['user'])
@@ -260,21 +260,21 @@ class DemoModeTests(TestCase):
         self.assertEqual(first, second)
 
     def test_demo_mode_advances_with_turn_index(self):
-        turns = [llm.get_next_turn(DAILY_ROUTINE, turn_index=i)['tutor_message_es']
+        turns = [llm.get_next_turn(DAILY_ROUTINE, turn_index=i)['tutor_message']
                  for i in range(3)]
         self.assertEqual(len(set(turns)), 3, 'each turn should be a different line')
 
     def test_turn_index_wraps_past_the_end_of_the_bank(self):
-        bank_size = len(llm.FALLBACK_TURNS[DAILY_ROUTINE])
+        bank_size = len(llm.FALLBACK_TURNS['Spanish'][DAILY_ROUTINE])
         first = llm.get_next_turn(DAILY_ROUTINE, turn_index=0)
         wrapped = llm.get_next_turn(DAILY_ROUTINE, turn_index=bank_size)
-        self.assertEqual(first['tutor_message_es'], wrapped['tutor_message_es'])
+        self.assertEqual(first['tutor_message'], wrapped['tutor_message'])
 
     def test_mutating_a_returned_turn_does_not_poison_the_bank(self):
         turn = llm.get_next_turn(DAILY_ROUTINE, turn_index=0)
-        turn['replies'][0]['es'] = 'MUTATED'
+        turn['replies'][0]['text'] = 'MUTATED'
         fresh = llm.get_next_turn(DAILY_ROUTINE, turn_index=0)
-        self.assertNotEqual(fresh['replies'][0]['es'], 'MUTATED')
+        self.assertNotEqual(fresh['replies'][0]['text'], 'MUTATED')
 
 
 @override_settings(DEMO_MODE=False, LLM_PROVIDER='deepseek')
@@ -282,31 +282,31 @@ class EvaluateFreetextTests(TestCase):
     def test_well_formed_evaluation_is_used(self):
         with stub(json.dumps(GOOD_EVAL)):
             result = llm.evaluate_freetext_reply(
-                DAILY_ROUTINE, 'levantarse', 'Me levanto a las siete')
+                DAILY_ROUTINE, 'Spanish', 'levantarse', 'Me levanto a las siete')
         self.assertEqual(result['verdict'], 'minor')
         self.assertTrue(result['graded'])
         self.assertTrue(result['used_target_word'])
-        self.assertEqual(result['corrected_es'], 'Me levanto a las siete.')
+        self.assertEqual(result['corrected'], 'Me levanto a las siete.')
 
     def test_every_documented_verdict_is_accepted(self):
         for verdict in llm.VERDICTS:
             with self.subTest(verdict=verdict):
                 with stub(json.dumps(dict(GOOD_EVAL, verdict=verdict))):
                     result = llm.evaluate_freetext_reply(
-                        DAILY_ROUTINE, 'levantarse', 'algo')
+                        DAILY_ROUTINE, 'Spanish', 'levantarse', 'algo')
                 self.assertEqual(result['verdict'], verdict)
 
     def test_unknown_verdict_degrades_to_wrong_but_stays_graded(self):
         with stub(json.dumps(dict(GOOD_EVAL, verdict='excellent'))):
             result = llm.evaluate_freetext_reply(
-                DAILY_ROUTINE, 'levantarse', 'Me levanto')
+                DAILY_ROUTINE, 'Spanish', 'levantarse', 'Me levanto')
         self.assertEqual(result['verdict'], 'wrong')
         self.assertTrue(result['graded'])
 
     def test_verdict_is_case_insensitive(self):
         with stub(json.dumps(dict(GOOD_EVAL, verdict='PERFECT'))):
             result = llm.evaluate_freetext_reply(
-                DAILY_ROUTINE, 'levantarse', 'Me levanto')
+                DAILY_ROUTINE, 'Spanish', 'levantarse', 'Me levanto')
         self.assertEqual(result['verdict'], 'perfect')
 
     def test_empty_reply_is_graded_blank_without_calling_out(self):
@@ -317,7 +317,7 @@ class EvaluateFreetextTests(TestCase):
             for blank in ('', '   ', '\n\t'):
                 with self.subTest(reply=blank):
                     result = llm.evaluate_freetext_reply(
-                        DAILY_ROUTINE, 'levantarse', blank)
+                        DAILY_ROUTINE, 'Spanish', 'levantarse', blank)
                     self.assertEqual(result['verdict'], 'blank')
                     self.assertTrue(result['graded'])
 
@@ -325,10 +325,10 @@ class EvaluateFreetextTests(TestCase):
         # The critical case: an outage must not record a wrong answer.
         with raising_stub(TimeoutError('timed out')):
             result = llm.evaluate_freetext_reply(
-                DAILY_ROUTINE, 'levantarse', 'Me levanto a las siete')
+                DAILY_ROUTINE, 'Spanish', 'levantarse', 'Me levanto a las siete')
         self.assertFalse(result['graded'])
         self.assertIsNone(result['verdict'])
-        self.assertTrue(result['tutor_message_es'], 'conversation should still continue')
+        self.assertTrue(result['tutor_message'], 'conversation should still continue')
         self.assertIn("hasn't affected your review", result['feedback_en'])
 
     def test_garbage_response_returns_ungraded(self):
@@ -336,23 +336,23 @@ class EvaluateFreetextTests(TestCase):
             with self.subTest(raw=raw):
                 with stub(raw):
                     result = llm.evaluate_freetext_reply(
-                        DAILY_ROUTINE, 'levantarse', 'Me levanto')
+                        DAILY_ROUTINE, 'Spanish', 'levantarse', 'Me levanto')
                 self.assertFalse(result['graded'])
 
     def test_evaluation_missing_tutor_message_keeps_the_grade(self):
-        payload = {k: v for k, v in GOOD_EVAL.items() if k != 'tutor_message_es'}
+        payload = {k: v for k, v in GOOD_EVAL.items() if k != 'tutor_message'}
         with stub(json.dumps(payload)):
             result = llm.evaluate_freetext_reply(
-                DAILY_ROUTINE, 'levantarse', 'Me levanto')
+                DAILY_ROUTINE, 'Spanish', 'levantarse', 'Me levanto')
         self.assertTrue(result['graded'], 'a good grade should survive a missing message')
         self.assertEqual(result['verdict'], 'minor')
-        self.assertTrue(result['tutor_message_es'], 'borrowed from the fallback bank')
+        self.assertTrue(result['tutor_message'], 'borrowed from the fallback bank')
 
     def test_evaluation_with_unusable_replies_keeps_the_grade(self):
         payload = dict(GOOD_EVAL, replies='not a list')
         with stub(json.dumps(payload)):
             result = llm.evaluate_freetext_reply(
-                DAILY_ROUTINE, 'levantarse', 'Me levanto')
+                DAILY_ROUTINE, 'Spanish', 'levantarse', 'Me levanto')
         self.assertTrue(result['graded'])
         self.assertGreaterEqual(len(result['replies']), 2)
 
@@ -364,11 +364,11 @@ class EvaluateFreetextTests(TestCase):
             return json.dumps(GOOD_EVAL)
 
         class FakeItem:
-            spanish = 'la cuenta'
+            term = 'la cuenta'
             english = 'the bill'
 
         with mock.patch.object(llm, 'PROVIDERS', {'deepseek': _capture}):
-            llm.evaluate_freetext_reply(ORDERING_FOOD, FakeItem(), 'La cuenta por favor')
+            llm.evaluate_freetext_reply(ORDERING_FOOD, 'Spanish', FakeItem(), 'La cuenta por favor')
         self.assertIn('la cuenta', seen['user'])
         self.assertIn('La cuenta por favor', seen['user'])
 
@@ -486,7 +486,7 @@ class GeminiTransportTests(TestCase):
         with raising_stub(RuntimeError('402 no quota')):
             turn = llm.get_next_turn(DAILY_ROUTINE)
         self.assertEqual(turn['provider'], 'fallback')
-        self.assertTrue(turn['tutor_message_es'])
+        self.assertTrue(turn['tutor_message'])
 
 
 class SentenceStarterTests(TestCase):
@@ -525,12 +525,13 @@ class SentenceStarterTests(TestCase):
         self.assertEqual(turn['sentence_starter'], '')
 
     def test_every_demo_turn_has_a_usable_starter(self):
-        for topic, bank in llm.FALLBACK_TURNS.items():
-            for index, turn in enumerate(bank):
-                with self.subTest(topic=topic, index=index):
-                    starter = turn['sentence_starter']
-                    self.assertTrue(starter, 'demo mode should never lack one')
-                    self.assertEqual(llm._normalise_starter(starter), starter)
+        for language, topics in llm.FALLBACK_TURNS.items():
+            for topic, bank in topics.items():
+                for index, turn in enumerate(bank):
+                    with self.subTest(language=language, topic=topic, index=index):
+                        starter = turn['sentence_starter']
+                        self.assertTrue(starter, 'demo mode should never lack one')
+                        self.assertEqual(llm._normalise_starter(starter), starter)
 
 
 class OpenAiCompatibleTransportTests(TestCase):
@@ -644,49 +645,86 @@ class ProviderSelectionTests(TestCase):
 
 
 class FallbackBankTests(TestCase):
-    """The hand-written bank is the safety net, so validate its shape."""
+    """The hand-written bank is the safety net, so validate its shape.
 
-    def test_every_topic_has_a_bank(self):
-        for topic in (DAILY_ROUTINE, ORDERING_FOOD, TRAVEL_BASICS):
-            with self.subTest(topic=topic):
-                self.assertGreaterEqual(len(llm.FALLBACK_TURNS[topic]), 3)
+    Every invariant is checked for all four languages, not just the default:
+    a malformed German turn would only ever surface during an outage, which
+    is the worst possible moment to discover it.
+    """
+
+    def every_turn(self):
+        """(language, topic, index, turn) for the whole bank."""
+        for language, topics in llm.FALLBACK_TURNS.items():
+            for topic, bank in topics.items():
+                for index, turn in enumerate(bank):
+                    yield language, topic, index, turn
+
+    def test_every_language_covers_every_topic(self):
+        for language in LANGUAGES:
+            with self.subTest(language=language):
+                self.assertIn(language, llm.FALLBACK_TURNS)
+                for topic in (DAILY_ROUTINE, ORDERING_FOOD, TRAVEL_BASICS):
+                    self.assertGreaterEqual(
+                        len(llm.FALLBACK_TURNS[language][topic]), 3,
+                        'an outage would loop immediately with fewer')
 
     def test_every_fallback_turn_is_well_formed(self):
-        for topic, bank in llm.FALLBACK_TURNS.items():
-            for index, turn in enumerate(bank):
-                with self.subTest(topic=topic, index=index):
-                    self.assertTrue(turn['tutor_message_es'])
-                    self.assertTrue(turn['tutor_message_en'])
-                    self.assertTrue(turn['target_word'])
-                    self.assertEqual(len(turn['replies']), 3)
-                    self.assertEqual(
-                        sum(r['is_correct'] for r in turn['replies']), 1,
-                        'exactly one reply must be correct')
-                    self.assertEqual([r['id'] for r in turn['replies']], [0, 1, 2])
+        for language, topic, index, turn in self.every_turn():
+            with self.subTest(language=language, topic=topic, index=index):
+                self.assertTrue(turn['tutor_message'])
+                self.assertTrue(turn['tutor_message_en'])
+                self.assertTrue(turn['target_word'])
+                self.assertEqual(len(turn['replies']), 3)
+                self.assertEqual(
+                    sum(r['is_correct'] for r in turn['replies']), 1,
+                    'exactly one reply must be correct')
+                self.assertEqual([r['id'] for r in turn['replies']], [0, 1, 2])
 
     def test_every_wrong_reply_explains_itself(self):
-        for topic, bank in llm.FALLBACK_TURNS.items():
-            for index, turn in enumerate(bank):
-                for reply in turn['replies']:
-                    if not reply['is_correct']:
-                        with self.subTest(topic=topic, index=index, es=reply['es']):
-                            self.assertTrue(
-                                reply['why_wrong'],
-                                'a distractor needs a reason so the app can teach')
+        for language, topic, index, turn in self.every_turn():
+            for reply in turn['replies']:
+                if not reply['is_correct']:
+                    with self.subTest(language=language, topic=topic,
+                                      index=index, reply=reply['text']):
+                        self.assertTrue(
+                            reply['why_wrong'],
+                            'a distractor needs a reason so the app can teach')
 
     def test_fallback_turns_pass_the_normaliser(self):
         # Whatever the bank contains must survive the same validation a live
         # response goes through.
-        for topic, bank in llm.FALLBACK_TURNS.items():
-            for index, turn in enumerate(bank):
-                with self.subTest(topic=topic, index=index):
-                    llm._normalise_turn(turn)
+        for language, topic, index, turn in self.every_turn():
+            with self.subTest(language=language, topic=topic, index=index):
+                llm._normalise_turn(turn)
 
     def test_correct_answer_is_not_always_in_the_same_position(self):
-        positions = set()
-        for bank in llm.FALLBACK_TURNS.values():
-            for turn in bank:
+        for language in LANGUAGES:
+            positions = set()
+            for _l, _t, _i, turn in self.every_turn():
+                if _l != language:
+                    continue
                 for i, reply in enumerate(turn['replies']):
                     if reply['is_correct']:
                         positions.add(i)
-        self.assertGreater(len(positions), 1, 'a fixed position is guessable')
+            with self.subTest(language=language):
+                self.assertGreater(
+                    len(positions), 1, 'a fixed position is guessable')
+
+    def test_a_bank_never_falls_through_to_another_language(self):
+        # The whole point of a per-language bank: an outage during a German
+        # lesson must not answer in Spanish.
+        german = llm.fallback_turn(DAILY_ROUTINE, 'German')
+        spanish = llm.fallback_turn(DAILY_ROUTINE, 'Spanish')
+        self.assertNotEqual(german['tutor_message'], spanish['tutor_message'])
+
+    def test_an_unknown_language_falls_back_to_the_default(self):
+        turn = llm.fallback_turn(DAILY_ROUTINE, 'Klingon')
+        self.assertEqual(turn['tutor_message'],
+                         llm.fallback_turn(DAILY_ROUTINE, 'Spanish')['tutor_message'])
+
+    def test_demo_bank_size_is_per_language(self):
+        for language in LANGUAGES:
+            with self.subTest(language=language):
+                self.assertEqual(
+                    llm.demo_bank_size(DAILY_ROUTINE, language),
+                    len(llm.FALLBACK_TURNS[language][DAILY_ROUTINE]))

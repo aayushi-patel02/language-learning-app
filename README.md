@@ -1,6 +1,7 @@
 # Charla
 
-A conversational Spanish tutor that decides what you practise using spaced repetition.
+A conversational language tutor that decides what you practise using spaced
+repetition. Teaches Spanish, French, German and Hindi.
 
 Flashcard apps drill words in isolation, and conversation apps don't track what
 you're forgetting. Charla does both: it pulls the vocabulary you owe a review
@@ -12,11 +13,15 @@ Built for the Nerdy AI Hackathon Challenge.
 
 ## What it does
 
+- **Four languages** — Spanish, French, German and Hindi. Each keeps its own
+  schedule, so switching costs you nothing.
 - **Three conversation topics** — daily routine, ordering food, travel basics.
-  60 hand-checked vocabulary items with example sentences.
+  240 hand-checked vocabulary items with example sentences, 60 per language.
+  Hindi carries a romanisation, since Devanagari tells an English beginner
+  nothing about how a word sounds.
 - **Two ways to answer.** Tap a suggested reply, or type your own and get it
   evaluated. Chips are the default because they're fast and predictable; free
-  text is where the model actually reads your Spanish.
+  text is where the model actually reads what you wrote.
 - **Real SM-2 scheduling.** Not a simplified stand-in — the full algorithm,
   including the ease-factor floor and the lapse reset. See below.
 - **Session recap** showing what you practised and when each word is next due.
@@ -112,8 +117,12 @@ python manage.py seed_vocab
 python manage.py runserver
 ```
 
-The API is at `http://127.0.0.1:8000/api/`, the Django admin at `/admin/`
+The API is at `http://127.0.0.1:8001/api/`, the Django admin at `/admin/`
 (run `python manage.py createsuperuser` first).
+
+`runserver` defaults to 8001 rather than Django's 8000, so this can run
+alongside another local Django project. Pass a port to override it, or set
+`CHARLA_PORT`.
 
 **Frontend**
 
@@ -162,17 +171,18 @@ priority order.
 
 ## Project status
 
-Working end to end: data model, SM-2 scheduler, LLM adapter with fallbacks, all
-three API endpoints, vocab seed, Django admin, and the React frontend. 150
-tests, none of which touch the network.
+Deployed and working end to end, in all four languages: data model, SM-2
+scheduler, LLM adapter with fallbacks, the API, vocab seed, accounts, Django
+admin and the React frontend. 231 tests, none of which touch the network.
 
-In progress: deployment.
+- Frontend: [language-learning-app-orcin.vercel.app](https://language-learning-app-orcin.vercel.app)
+- Backend: [charla-api.onrender.com](https://charla-api.onrender.com)
 
-Currently running on `DEMO_MODE=true`. The three providers wired up all refuse
-new free-tier projects at the moment, so the app serves its hand-written turn
-bank. Chip practice, SM-2 scheduling and the recap are fully real either way;
-what demo mode costs is free-text evaluation and conversational variety. Any
-provider with credit switches it back on through `LLM_PROVIDER`.
+Running live against Groq (`openai/gpt-oss-120b`). `DEMO_MODE=true` switches
+the whole app to the hand-written turn bank with no network calls at all,
+which is what a demo runs on so it cannot depend on someone else's uptime.
+Chip practice, SM-2 scheduling and the recap are fully real either way; what
+demo mode costs is free-text evaluation and conversational variety.
 
 ## Deployment
 
@@ -214,11 +224,15 @@ backend/
   tutor/
     models.py        vocab, review state, sessions, turns
     sm2.py           SM-2 algorithm and session scheduler
-    tests.py         scheduler test suite
-    llm.py           provider adapter and prompts
+    llm.py           provider adapter and per-language prompts
+    demo_turns.py    hand-written fallback bank, one per language
     views.py         API endpoints
+    auth_views.py    guest, signup, login, profile
+    insights.py      grammar areas derived from stored corrections
+    tests*.py        scheduler, API, auth and adapter suites
     management/commands/seed_vocab.py
 frontend/
-  src/components/    Home, Chat, Recap
+  src/components/    screens, from splash through recap
+  src/speech.js      pronunciation, one voice tag per language
   src/api.js         backend client
 ```

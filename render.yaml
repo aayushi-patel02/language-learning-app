@@ -43,6 +43,6 @@ services:
         value: "openai/gpt-oss-120b"
 
       - key: SESSION_TURN_LIMIT
-        value: "8"
+        value: "5"
       - key: DEMO_USERNAME
         value: "demo"

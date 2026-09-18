@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { getProgress } from '../api'
 import { topicById } from '../topics'
+import Chevron from './Chevron'
 import TopicIcon from './TopicIcon'
 
 function formatMinutes(seconds) {
@@ -31,7 +32,7 @@ export default function Progress() {
   }, [])
 
   return (
-    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-8 pb-12">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-8 pb-28">
       <header className="mb-6 flex items-center gap-3">
         <Link
           to="/"
@@ -39,7 +40,7 @@ export default function Progress() {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </Link>
         <h1 className="text-2xl font-extrabold tracking-tight">Your progress</h1>
       </header>
@@ -65,7 +66,7 @@ function Body({ data }) {
         </p>
         <Link
           to="/"
-          className="btn-3d mt-5 inline-flex min-h-12 items-center justify-center
+          className="btn mt-5 inline-flex min-h-12 items-center justify-center
                      rounded-2xl bg-learner px-5 py-3 text-sm font-extrabold
                      tracking-wide text-white uppercase hover:brightness-110"
         >
@@ -92,7 +93,7 @@ function Body({ data }) {
         <Stat
           value={thisWeek === null ? 'n/a' : `${thisWeek}%`}
           label="Accuracy"
-          tone={change !== null && change > 0 ? 'text-success' : ''}
+          tone={change !== null && change > 0 ? 'text-learner' : ''}
         />
       </div>
       {change !== null && (
@@ -116,7 +117,7 @@ function Body({ data }) {
           suffix={`of ${data.vocabulary_total}`}
           label="Words started"
         />
-        <Stat value={data.words_strong} label="Known well" tone="text-success" />
+        <Stat value={data.words_strong} label="Known well" tone="text-learner" />
         <Stat
           value={percent(data.accuracy) === null ? 'n/a' : `${percent(data.accuracy)}%`}
           label="Accuracy"
@@ -171,7 +172,7 @@ function Body({ data }) {
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold">
-                      {word.spanish}
+                      {word.term}
                     </span>
                     <span className="block truncate text-xs text-muted">
                       {word.english}
@@ -188,8 +189,8 @@ function Body({ data }) {
                       <span className="block">{Math.round(word.accuracy * 100)}% right</span>
                     )}
                   </span>
-                  <span aria-hidden="true" className="shrink-0 text-muted">
-                    &rsaquo;
+                  <span className="shrink-0 text-muted">
+                    <Chevron className="h-[18px] w-[18px]" />
                   </span>
                 </Link>
               </li>
@@ -209,9 +210,9 @@ function Body({ data }) {
 
       <Link
         to="/vocabulary"
-        className="btn-3d mt-8 flex min-h-12 items-center justify-center rounded-2xl
-                   border-2 border-line bg-white px-4 py-3 text-sm font-extrabold
-                   tracking-wide uppercase hover:bg-surface"
+        className="btn mt-8 flex min-h-12 items-center justify-center rounded-2xl
+                   border border-line bg-white px-4 py-3 text-sm font-extrabold
+                   tracking-wide uppercase transition-colors hover:border-learner"
       >
         Browse all words
       </Link>
@@ -254,9 +255,9 @@ function Calendar({ days }) {
   // reading is "did I practise", not "how many answers exactly".
   const level = (answers) => {
     if (!answers) return 'bg-line'
-    if (answers < 5) return 'bg-success/30'
-    if (answers < 12) return 'bg-success/60'
-    return 'bg-success'
+    if (answers < 5) return 'bg-learner/30'
+    if (answers < 12) return 'bg-learner/60'
+    return 'bg-learner'
   }
 
   return (
@@ -279,7 +280,7 @@ function Calendar({ days }) {
 
 function Trend({ trend }) {
   const style = {
-    improving: 'bg-success-soft text-success',
+    improving: 'bg-learner-soft text-learner',
     'needs work': 'bg-error-soft text-error',
     steady: 'bg-surface text-muted',
     watching: 'bg-surface text-muted',
@@ -336,7 +337,7 @@ function TopicRow({ topic }) {
           style={{ width: `${started}%` }}
         />
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-success"
+          className="absolute inset-y-0 left-0 rounded-full bg-learner"
           style={{ width: `${strong}%` }}
         />
       </div>

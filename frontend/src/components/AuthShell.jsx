@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 
+import Chevron from './Chevron'
+
 /** Shared chrome for the sign-up and log-in screens. */
 export default function AuthShell({ title, subtitle, children }) {
   const navigate = useNavigate()
@@ -14,7 +16,7 @@ export default function AuthShell({ title, subtitle, children }) {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </button>
       </header>
 
@@ -35,7 +37,7 @@ export function Field({ label, hint, invalid, ...props }) {
       <input
         // text-base, not text-sm: iOS Safari zooms the whole page when a
         // focused input is under 16px.
-        className={`min-h-12 w-full rounded-xl border-2 px-3.5 py-2.5 text-base
+        className={`min-h-12 w-full rounded-xl border px-3.5 py-2.5 text-base
                     focus:outline-none ${
                       invalid
                         ? 'border-error bg-error-soft'
@@ -53,7 +55,7 @@ export function SubmitButton({ busy, children }) {
     <button
       type="submit"
       disabled={busy}
-      className="btn-3d mt-5 min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
+      className="btn mt-5 min-h-12 w-full rounded-2xl bg-learner px-4 py-3 text-sm
                  font-extrabold tracking-wide text-white uppercase
                  hover:brightness-110 disabled:opacity-60"
     >

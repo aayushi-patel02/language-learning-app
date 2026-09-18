@@ -4,13 +4,14 @@ import { Link } from 'react-router-dom'
 import { getVocabulary } from '../api'
 import { formatDue } from '../dates'
 import { canSpeak, speak } from '../speech'
+import Chevron from './Chevron'
 
 // Shelves are mutually exclusive so the tabs partition the collection.
 // Saved and recent are cross-cuts over the same words, kept at the end.
 const TABS = [
-  { id: 'due', label: 'To review', tone: 'text-success' },
+  { id: 'due', label: 'To review', tone: 'text-learner' },
   { id: 'learning', label: 'Learning' },
-  { id: 'mastered', label: 'Mastered', tone: 'text-success' },
+  { id: 'mastered', label: 'Mastered', tone: 'text-learner' },
   { id: 'new', label: 'Not started' },
   { id: 'saved', label: 'Saved' },
   { id: 'recent', label: 'Recent' },
@@ -36,7 +37,7 @@ export default function Vocabulary() {
   const words = listFor(tab)
 
   return (
-    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-8 pb-12">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-8 pb-28">
       <header className="mb-5 flex items-center gap-3">
         <Link
           to="/"
@@ -44,7 +45,7 @@ export default function Vocabulary() {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </Link>
         <h1 className="flex-1 text-2xl font-extrabold tracking-tight">Vocabulary</h1>
         {data && (
@@ -93,7 +94,10 @@ export default function Vocabulary() {
           </div>
 
           {words.length === 0 ? (
-            <EmptyShelf tab={tab} />
+            // The learning shelf is exactly the set of words that have been
+            // practised and are waiting on a future date, which is what the
+            // review shelf needs to explain itself.
+            <EmptyShelf tab={tab} waiting={listFor('learning')} />
           ) : (
             <ul className="flex flex-col gap-2">
               {words.map((word) => (
@@ -107,22 +111,47 @@ export default function Vocabulary() {
   )
 }
 
-function EmptyShelf({ tab }) {
-  const message = {
-    due: 'Nothing is due right now. Finish a lesson and words will appear here when they are ready for review.',
-    learning: 'No words in progress yet.',
-    mastered: 'None yet. A word lands here after three correct recalls in a row.',
-    new: 'You have started every word in the collection.',
-    saved: 'Tap the bookmark on any word to keep it here.',
-    recent: 'Words you practise will show up here.',
-  }[tab]
+function EmptyShelf({ tab, waiting }) {
+  // An empty review shelf is the normal state right after a lesson, so say
+  // when the words come back rather than implying nothing happened.
+  if (tab === 'due') {
+    return <Shelf>{nextDueSummary(waiting) ?? 'Nothing to review yet.'}</Shelf>
+  }
 
   return (
+    <Shelf>
+      {{
+        learning: 'No words in progress yet.',
+        mastered: 'None yet. A word lands here after three correct recalls in a row.',
+        new: 'You have started every word in the collection.',
+        saved: 'Tap the bookmark on any word to keep it here.',
+        recent: 'Words you practise will show up here.',
+      }[tab]}
+    </Shelf>
+  )
+}
+
+function Shelf({ children }) {
+  return (
     <p className="rounded-2xl border border-line bg-white px-4 py-8 text-center
-                  text-sm text-muted">
-      {message}
+                  text-sm leading-relaxed text-muted">
+      {children}
     </p>
   )
+}
+
+/** "All caught up. 18 words come back tomorrow." */
+function nextDueSummary(waiting) {
+  const dates = (waiting ?? [])
+    .map((word) => word.due_date)
+    .filter(Boolean)
+    .sort()
+  if (!dates.length) return null
+
+  const soonest = dates[0]
+  const count = dates.filter((date) => date === soonest).length
+  const noun = count === 1 ? 'word comes' : 'words come'
+  return `All caught up. ${count} ${noun} back ${formatDue(soonest)}.`
 }
 
 function WordRow({ word }) {
@@ -135,8 +164,8 @@ function WordRow({ word }) {
         {speakable && (
           <button
             type="button"
-            aria-label={`Hear ${word.spanish}`}
-            onClick={() => speak(word.spanish)}
+            aria-label={`Hear ${word.term}`}
+            onClick={() => speak(word.term, word.language)}
             className="inline-flex min-h-11 min-w-11 shrink-0 items-center
                        justify-center rounded-xl text-muted transition
                        hover:bg-surface hover:text-ink"
@@ -150,7 +179,14 @@ function WordRow({ word }) {
           className="flex min-w-0 flex-1 items-center gap-3 py-2 pr-2 focus:outline-none"
         >
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-bold">{word.spanish}</span>
+            <span className="block truncate text-sm font-bold">{word.term}</span>
+            {/* Only Devanagari carries one, so this row simply does not
+                appear for the Latin-script languages. */}
+            {word.romanisation && (
+              <span className="block truncate text-xs text-muted italic">
+                {word.romanisation}
+              </span>
+            )}
             <span className="block truncate text-xs text-muted">{word.english}</span>
           </span>
           <span className="shrink-0 text-right">
@@ -165,8 +201,8 @@ function WordRow({ word }) {
               <span className="block text-[11px] text-learner">saved</span>
             )}
           </span>
-          <span aria-hidden="true" className="shrink-0 text-muted">
-            &rsaquo;
+          <span className="shrink-0 text-muted">
+            <Chevron className="h-[18px] w-[18px]" />
           </span>
         </Link>
       </div>

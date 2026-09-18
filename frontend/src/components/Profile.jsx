@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { deleteAccount, updateMe } from '../api'
+import { deleteAccount, getLanguages, updateMe } from '../api'
 import { useAuth } from '../auth'
+import Chevron from './Chevron'
 
 const AVATARS = ['🦉', '🐙', '🦊', '🐢', '🦜', '🐝', '🌵', '🍋']
-const LANGUAGES = ['English', 'Spanish', 'Hindi', 'Gujarati', 'French', 'German', 'Portuguese']
 
 export default function Profile() {
   const navigate = useNavigate()
@@ -14,6 +14,17 @@ export default function Profile() {
   const [draft, setDraft] = useState(null)
   const [saved, setSaved] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  // Fetched rather than hard-coded, so this list cannot drift out of step
+  // with the vocabulary that has actually been seeded. Offering a language
+  // with no words behind it is what made the picker meaningless before.
+  const [languages, setLanguages] = useState([])
+
+  useEffect(() => {
+    getLanguages()
+      .then(({ data }) => setLanguages(data.languages))
+      .catch(() => setLanguages([]))
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -76,7 +87,7 @@ export default function Profile() {
       </div>
 
       {user.is_guest && (
-        <div className="mt-5 rounded-2xl bg-topic-morning-soft px-4 py-3.5">
+        <div className="mt-5 rounded-2xl bg-learner-soft px-4 py-3.5">
           <p className="text-sm font-bold">Your progress is not saved anywhere</p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Create an account and everything you have practised comes with you.
@@ -84,11 +95,21 @@ export default function Profile() {
           </p>
           <Link
             to="/signup"
-            className="btn-3d mt-3 flex min-h-11 items-center justify-center rounded-xl
-                       bg-topic-morning px-4 py-2 text-xs font-extrabold tracking-wide
+            className="btn mt-3 flex min-h-11 items-center justify-center rounded-xl
+                       bg-learner px-4 py-2 text-xs font-extrabold tracking-wide
                        text-white uppercase hover:brightness-110"
           >
             Create an account
+          </Link>
+          {/* The other half of the same problem: signing in to an account
+              that already exists. Without this a guest cannot reach one,
+              since there is no log out to go back through. */}
+          <Link
+            to="/login"
+            className="mt-2 flex min-h-11 items-center justify-center text-xs
+                       font-bold text-muted underline"
+          >
+            I already have an account
           </Link>
         </div>
       )}
@@ -104,7 +125,7 @@ export default function Profile() {
             onClick={() => change('avatar', emoji)}
             aria-label={`Choose ${emoji}`}
             aria-pressed={draft.avatar === emoji}
-            className={`flex h-12 w-12 items-center justify-center rounded-xl border-2
+            className={`flex h-12 w-12 items-center justify-center rounded-xl border
                         text-2xl transition-colors ${
                           draft.avatar === emoji
                             ? 'border-learner bg-surface'
@@ -125,27 +146,38 @@ export default function Profile() {
             value={draft.display_name}
             onChange={(event) => change('display_name', event.target.value)}
             placeholder="Your name"
-            className="mt-2.5 min-h-12 w-full rounded-xl border-2 border-line bg-white
+            className="mt-2.5 min-h-12 w-full rounded-xl border border-line bg-white
                        px-3.5 py-2.5 text-base focus:border-learner focus:outline-none"
           />
         </>
       )}
 
       <Picker
-        label="I speak"
-        value={draft.native_language}
-        onChange={(value) => change('native_language', value)}
-      />
-      <Picker
         label="I am learning"
+        options={languages}
         value={draft.learning_language}
         onChange={(value) => change('learning_language', value)}
-        note="Charla currently teaches Spanish. Other languages are a matter of
-              seeding vocabulary, not changing the app."
+        note="Switching takes effect on your next lesson. Each language keeps
+              its own schedule, so nothing you have already learned is lost."
       />
 
-      {saved && <p className="mt-4 text-xs text-success">Saved.</p>}
+      <h2 className="mt-7 text-xs font-bold tracking-wide text-muted uppercase">
+        I speak
+      </h2>
+      <p className="mt-2 text-sm">
+        English
+        <span className="ml-2 text-xs text-muted">
+          Explanations and translations are in English.
+        </span>
+      </p>
 
+      {saved && <p className="mt-4 text-xs text-learner">Saved.</p>}
+
+      {/* Neither action means anything for a guest, and both are traps: there
+          are no credentials to log back in with, so either one silently
+          destroys every word they have practised. The account card above is
+          the only exit a guest is offered. */}
+      {!user.is_guest && (
       <div className="mt-8 space-y-2">
         <button
           type="button"
@@ -153,15 +185,15 @@ export default function Profile() {
             await signOut()
             navigate('/welcome', { replace: true })
           }}
-          className="btn-3d flex min-h-12 w-full items-center justify-center rounded-2xl
-                     border-2 border-line bg-white px-4 py-3 text-sm font-extrabold
-                     tracking-wide uppercase hover:bg-surface"
+          className="btn flex min-h-12 w-full items-center justify-center rounded-2xl
+                     border border-line bg-white px-4 py-3 text-sm font-extrabold
+                     tracking-wide uppercase transition-colors hover:border-learner"
         >
           Log out
         </button>
 
         {confirmingDelete ? (
-          <div className="rounded-2xl border-2 border-error bg-error-soft px-4 py-3.5">
+          <div className="rounded-2xl border border-error bg-error-soft px-4 py-3.5">
             <p className="text-sm font-bold text-error">Delete this account?</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
               Every word you have learned and every conversation goes with it.
@@ -171,7 +203,7 @@ export default function Profile() {
               <button
                 type="button"
                 onClick={remove}
-                className="btn-3d min-h-11 flex-1 rounded-xl bg-error px-3 py-2 text-xs
+                className="btn min-h-11 flex-1 rounded-xl bg-error px-3 py-2 text-xs
                            font-extrabold tracking-wide text-white uppercase
                            hover:brightness-110"
               >
@@ -180,9 +212,9 @@ export default function Profile() {
               <button
                 type="button"
                 onClick={() => setConfirmingDelete(false)}
-                className="btn-3d min-h-11 flex-1 rounded-xl border-2 border-line
+                className="btn min-h-11 flex-1 rounded-xl border border-line
                            bg-white px-3 py-2 text-xs font-extrabold tracking-wide
-                           uppercase"
+                           uppercase transition-colors hover:border-learner"
               >
                 Keep it
               </button>
@@ -199,30 +231,39 @@ export default function Profile() {
           </button>
         )}
       </div>
+      )}
     </Shell>
   )
 }
 
-function Picker({ label, value, onChange, note }) {
+function Picker({ label, options, value, onChange, note }) {
   return (
     <>
       <h2 className="mt-7 text-xs font-bold tracking-wide text-muted uppercase">
         {label}
       </h2>
       <div className="mt-2.5 flex flex-wrap gap-2">
-        {LANGUAGES.map((language) => (
+        {options.map(({ code, label: name, word_count: words }) => (
           <button
-            key={language}
+            key={code}
             type="button"
-            onClick={() => onChange(language)}
-            className={`inline-flex min-h-11 items-center rounded-full border px-3.5
-                        text-xs font-bold transition-colors ${
-                          value === language
+            onClick={() => onChange(code)}
+            aria-pressed={value === code}
+            className={`inline-flex min-h-11 flex-col items-start justify-center
+                        rounded-2xl border px-3.5 py-1.5 transition-colors ${
+                          value === code
                             ? 'border-learner bg-learner text-white'
                             : 'border-line bg-white hover:border-ink/20'
                         }`}
           >
-            {language}
+            <span className="text-xs font-bold">{name}</span>
+            <span
+              className={`text-[10px] ${
+                value === code ? 'text-white/75' : 'text-muted'
+              }`}
+            >
+              {words} words
+            </span>
           </button>
         ))}
       </div>
@@ -233,7 +274,7 @@ function Picker({ label, value, onChange, note }) {
 
 function Shell({ children }) {
   return (
-    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-12">
+    <div className="app-column mx-auto min-h-full max-w-md px-5 pt-8 pb-28">
       <header className="mb-6 flex items-center gap-3">
         <Link
           to="/"
@@ -241,7 +282,7 @@ function Shell({ children }) {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </Link>
         <h1 className="text-2xl font-extrabold tracking-tight">Profile</h1>
       </header>

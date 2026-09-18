@@ -134,12 +134,42 @@ class LoginView(APIView):
         email = normalise_email(request.data.get('email'))
         password = request.data.get('password') or ''
 
-        user = authenticate(username=email, password=password)
-        if user is None:
-            # Deliberately does not say which half was wrong.
-            return Response({'detail': 'Email or password is incorrect.'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        return Response(issue(user))
+        if not email:
+            return Response({'detail': 'Please enter your email address.',
+                             'field': 'email'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not password:
+            return Response({'detail': 'Please enter your password.',
+                             'field': 'password'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Saying which half was wrong lets someone probe for registered
+        # addresses. That is accepted here: there is nothing sensitive behind
+        # these accounts, and the alternative makes a mistyped email look like
+        # a forgotten password, which sends people off to reset a password
+        # that was never wrong.
+        # Looked up by email, then authenticated against whatever username
+        # that row actually has. SignUpView sets username to the email, but
+        # accounts made any other way (createsuperuser, the admin) do not
+        # follow that rule, and authenticating on the email directly would
+        # tell those people their password was wrong forever.
+        candidates = list(User.objects.filter(email__iexact=email))
+        if not candidates:
+            return Response({'detail': 'No account found with that email.',
+                             'field': 'email'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        # Django does not make User.email unique, so more than one row can
+        # answer to an address. Whichever one the password opens is the one
+        # they meant.
+        for account in candidates:
+            user = authenticate(username=account.get_username(), password=password)
+            if user is not None:
+                return Response(issue(user))
+
+        return Response({'detail': 'That password is not right.',
+                         'field': 'password'},
+                        status=status.HTTP_401_UNAUTHORIZED)
 
 
 class LogoutView(APIView):

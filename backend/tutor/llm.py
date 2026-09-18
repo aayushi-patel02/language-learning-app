@@ -30,7 +30,12 @@ import re
 from django.conf import settings
 
 from .demo_turns import FALLBACK_TURNS
-from .models import DAILY_ROUTINE, ORDERING_FOOD, TRAVEL_BASICS
+from .models import (
+    DAILY_ROUTINE,
+    DEFAULT_LANGUAGE,
+    ORDERING_FOOD,
+    TRAVEL_BASICS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,32 +68,75 @@ class LLMError(RuntimeError):
 
 # --- prompts ---------------------------------------------------------------
 
-CHIP_SYSTEM_PROMPT = """\
-You are a warm, patient Spanish tutor talking with an English-speaking beginner.
+# The distractor rules are the part of the prompt that most affects quality,
+# and "a concrete grammatical error" means something different in each
+# language. Left generic, the model invents errors that are not errors - it
+# marked optional Spanish articles wrong until the permitted kinds were
+# enumerated - so each language names its own.
+ERROR_KINDS = {
+    'Spanish': """\
+  wrong verb conjugation or person, an infinitive left unconjugated, a missing
+  or wrong reflexive pronoun, wrong gender or article agreement, ser used where
+  estar belongs (or the reverse), a missing or wrong preposition, or a
+  confusable word substituted for the target.""",
+    'French': """\
+  wrong verb conjugation or person, an infinitive left unconjugated, a missing
+  or wrong reflexive pronoun, wrong gender or article agreement (le/la, un/une),
+  avoir used where etre belongs in a compound tense (or the reverse), a missing
+  or wrong preposition (a/de), a past participle left unagreed, or a confusable
+  word substituted for the target.""",
+    'German': """\
+  wrong verb conjugation or person, the verb in the wrong position (it must be
+  second in a main clause and final in a subordinate one), wrong case on an
+  article, adjective or pronoun (nominative where accusative or dative belongs),
+  wrong gender (der/die/das), a separable prefix left attached or dropped, a
+  preposition governing the wrong case, or a confusable word substituted for
+  the target.""",
+    'Hindi': """\
+  wrong verb conjugation or person, wrong gender agreement on the verb or
+  adjective, a wrong postposition (ko/se/mein/par), a noun left direct where the
+  oblique form belongs before a postposition, a mismatched formality level
+  (tu/tum/aap disagreeing with the verb), a missing or wrongly used "ne" with a
+  transitive verb in the past, or a confusable word substituted for the
+  target.""",
+}
+
+# What a native speaker accepts that a pedantic grader might not. Without
+# this the model rejects perfectly ordinary sentences for being terse.
+ALLOWANCES = {
+    'Spanish': 'Optional articles, dropped subject pronouns and shorter '
+               'phrasings are all correct Spanish.',
+    'French': 'Contractions, "on" in place of "nous", and shorter phrasings '
+              'are all correct French.',
+    'German': 'Both orders of a dative and accusative object, and shorter '
+              'phrasings, are correct German.',
+    'Hindi': 'Dropped subject pronouns, and either Devanagari or Roman '
+             'transliteration, are correct Hindi. Never mark an answer wrong '
+             'for being written in Roman script.',
+}
+
+CHIP_TEMPLATE = """\
+You are a warm, patient LANGUAGE tutor talking with an English-speaking beginner.
 You are holding a short, natural conversation on a fixed topic.
 
 Each turn you must:
-1. Say ONE line of Spanish, at most 15 words, that stays on the given topic and
+1. Say ONE line of LANGUAGE, at most 15 words, that stays on the given topic and
    directly sets up a reply using the TARGET WORD. The target word must appear
    in your line or be the obvious word needed to answer it. Never drift to a
    different subject.
-2. Offer exactly THREE replies. Exactly ONE is correct, natural Spanish that
+2. Offer exactly THREE replies. Exactly ONE is correct, natural LANGUAGE that
    answers your line and uses the target word properly.
 3. Keep every reply under 12 words.
 
 The two wrong replies are the most important part, and there are strict rules:
 
 - Each must contain a CONCRETE GRAMMATICAL ERROR, of one of these kinds only:
-  wrong verb conjugation or person, an infinitive left unconjugated, a missing
-  or wrong reflexive pronoun, wrong gender or article agreement, ser used where
-  estar belongs (or the reverse), a missing or wrong preposition, or a
-  confusable word substituted for the target.
+ERROR_KINDS
 - A reply is NOT wrong merely because it is off-topic, incomplete, informal, or
   answers a different question. Never use "doesn't answer the question" as a
   reason.
 - If a native speaker would accept the sentence as correct, IT IS NOT WRONG.
-  Optional articles, optional subject pronouns and shorter phrasings are all
-  perfectly correct Spanish - do not mark them wrong.
+  ALLOWANCES
 - Make wrong options tempting, never absurd or comical.
 - `why_wrong` must name the specific grammatical error, not a vague judgement.
 
@@ -97,26 +145,27 @@ Return ONLY a JSON object. No prose, no markdown fences.
 Also give a SENTENCE STARTER: the shape of a correct answer with the part the
 learner has to supply replaced by ____ . It scaffolds someone typing their own
 answer, so leave out the word being tested, never the easy scaffolding around
-it. For "What time do you get up?" a good starter is "Me levanto a las ____."
+it. For "What time do you get up?" a good starter leaves only the time blank,
 and a useless one is "____".
 
 {
-  "tutor_message_es": "your line in Spanish",
+  "tutor_message": "your line in LANGUAGE",
   "tutor_message_en": "literal English translation",
-  "target_word": "the Spanish vocabulary item this turn drills",
+  "target_word": "the LANGUAGE vocabulary item this turn drills",
   "sentence_starter": "a frame with ____ where the answer goes",
   "replies": [
-    {"es": "...", "en": "...", "is_correct": true},
-    {"es": "...", "en": "...", "is_correct": false, "why_wrong": "short reason in English"},
-    {"es": "...", "en": "...", "is_correct": false, "why_wrong": "short reason in English"}
+    {"text": "...", "en": "...", "is_correct": true},
+    {"text": "...", "en": "...", "is_correct": false, "why_wrong": "short reason in English"},
+    {"text": "...", "en": "...", "is_correct": false, "why_wrong": "short reason in English"}
   ]
 }
 
+Every "text" value must be written in LANGUAGE, never in English.
 Vary which position holds the correct reply - do not always put it first.
 """
 
-EVAL_SYSTEM_PROMPT = """\
-You are grading ONE free-text Spanish reply from an English-speaking beginner in
+EVAL_TEMPLATE = """\
+You are grading ONE free-text LANGUAGE reply from an English-speaking beginner in
 a conversation practice app, then continuing the conversation.
 
 Grade with exactly one verdict:
@@ -130,22 +179,41 @@ Be fair but not generous: a missing accent is "minor", a wrong verb person is
 "awkward", the wrong word entirely is "wrong". Feedback names the specific fix
 in one short encouraging English sentence - never a lecture.
 
+What a native speaker accepts, you accept: ALLOWANCES
+
 Return ONLY a JSON object. No prose, no markdown fences.
 
 {
   "verdict": "perfect|minor|awkward|wrong|blank",
   "used_target_word": true,
-  "corrected_es": "their sentence rewritten correctly, or \\"\\" if already correct",
+  "corrected": "their sentence rewritten correctly, or \\"\\" if already correct",
   "feedback_en": "one short encouraging sentence naming the fix",
-  "tutor_message_es": "your next line in Spanish, at most 15 words",
+  "tutor_message": "your next line in LANGUAGE, at most 15 words",
   "tutor_message_en": "literal English translation",
   "replies": [
-    {"es": "...", "en": "...", "is_correct": true},
-    {"es": "...", "en": "...", "is_correct": false, "why_wrong": "short reason in English"},
-    {"es": "...", "en": "...", "is_correct": false, "why_wrong": "short reason in English"}
+    {"text": "...", "en": "...", "is_correct": true},
+    {"text": "...", "en": "...", "is_correct": false, "why_wrong": "short reason in English"},
+    {"text": "...", "en": "...", "is_correct": false, "why_wrong": "short reason in English"}
   ]
 }
+
+Every "text" value must be written in LANGUAGE, never in English.
 """
+
+
+def _build_prompt(template, language):
+    """Fill a prompt template for one language.
+
+    Plain substitution rather than str.format, because both templates contain
+    a literal JSON object and every brace in it would have to be doubled.
+    """
+    language = language if language in ERROR_KINDS else DEFAULT_LANGUAGE
+    return (
+        template
+        .replace('ERROR_KINDS', ERROR_KINDS[language])
+        .replace('ALLOWANCES', ALLOWANCES[language])
+        .replace('LANGUAGE', language)
+    )
 
 
 # --- providers -------------------------------------------------------------
@@ -392,15 +460,18 @@ def _normalise_replies(raw):
     for position, entry in enumerate(raw):
         if isinstance(entry, str):
             # Some responses give bare strings; assume the first is the answer.
-            entry = {'es': entry, 'is_correct': position == 0}
+            entry = {'text': entry, 'is_correct': position == 0}
         if not isinstance(entry, dict):
             continue
-        spanish = _clean_str(entry.get('es') or entry.get('spanish'))
-        if not spanish:
+        # 'text' is what the prompt asks for; the others are what models
+        # actually emit when they echo a field name back instead.
+        text = _clean_str(
+            entry.get('text') or entry.get('term') or entry.get('es'))
+        if not text:
             continue
         chips.append({
             'id': len(chips),
-            'es': spanish,
+            'text': text,
             'en': _clean_str(entry.get('en') or entry.get('english')),
             'is_correct': bool(entry.get('is_correct')),
             'why_wrong': _clean_str(entry.get('why_wrong')),
@@ -422,12 +493,12 @@ def _normalise_turn(payload):
     if not isinstance(payload, dict):
         raise LLMError(f'expected a JSON object, got {type(payload).__name__}')
 
-    spanish = _clean_str(payload.get('tutor_message_es') or payload.get('ai_message'))
-    if not spanish:
-        raise LLMError('response has no tutor_message_es')
+    text = _clean_str(payload.get('tutor_message') or payload.get('ai_message'))
+    if not text:
+        raise LLMError('response has no tutor_message')
 
     return {
-        'tutor_message_es': spanish,
+        'tutor_message': text,
         'tutor_message_en': _clean_str(payload.get('tutor_message_en')),
         'target_word': _clean_str(payload.get('target_word')),
         'sentence_starter': _normalise_starter(payload.get('sentence_starter')),
@@ -466,15 +537,15 @@ def _normalise_evaluation(payload, fallback_turn):
         logger.warning('unrecognised verdict %r, grading as wrong', verdict)
         verdict = 'wrong'
 
-    spanish = _clean_str(payload.get('tutor_message_es') or payload.get('ai_message'))
+    text = _clean_str(payload.get('tutor_message') or payload.get('ai_message'))
     try:
         replies = _normalise_replies(payload.get('replies') or payload.get('reply_options'))
     except LLMError as exc:
         logger.warning('evaluation replies unusable (%s); using fallback chips', exc)
         replies = copy.deepcopy(fallback_turn['replies'])
 
-    if not spanish:
-        spanish = fallback_turn['tutor_message_es']
+    if not text:
+        text = fallback_turn['tutor_message']
         english = fallback_turn['tutor_message_en']
     else:
         english = _clean_str(payload.get('tutor_message_en'))
@@ -483,9 +554,9 @@ def _normalise_evaluation(payload, fallback_turn):
         'verdict': verdict,
         'graded': True,
         'used_target_word': bool(payload.get('used_target_word')),
-        'corrected_es': _clean_str(payload.get('corrected_es')),
+        'corrected': _clean_str(payload.get('corrected')),
         'feedback_en': _clean_str(payload.get('feedback_en')),
-        'tutor_message_es': spanish,
+        'tutor_message': text,
         'tutor_message_en': english,
         'replies': replies,
     }
@@ -498,11 +569,11 @@ def _format_vocab(items):
         return '(no specific vocabulary due - keep the conversation going)'
     lines = []
     for item in items:
-        spanish = getattr(item, 'spanish', None) or (
-            item.get('spanish') if isinstance(item, dict) else str(item))
+        term = getattr(item, 'term', None) or (
+            item.get('term') if isinstance(item, dict) else str(item))
         english = getattr(item, 'english', None) or (
             item.get('english') if isinstance(item, dict) else '')
-        lines.append(f'- {spanish}' + (f' ({english})' if english else ''))
+        lines.append(f'- {term}' + (f' ({english})' if english else ''))
     return '\n'.join(lines)
 
 
@@ -540,39 +611,49 @@ FALLBACK_FEEDBACK_EN = (
 )
 
 
-def _bank_for(topic):
-    return FALLBACK_TURNS.get(topic) or FALLBACK_TURNS[DAILY_ROUTINE]
+def _bank_for(topic, language=DEFAULT_LANGUAGE):
+    """The hand-written turns for one language and topic.
+
+    An unknown language falls back to the default's bank, but an unknown
+    topic within a known language falls back inside that language - never
+    across one, because serving Spanish into a German lesson would teach
+    the wrong thing.
+    """
+    by_topic = FALLBACK_TURNS.get(language) or FALLBACK_TURNS[DEFAULT_LANGUAGE]
+    return by_topic.get(topic) or by_topic[DAILY_ROUTINE]
 
 
-def fallback_turn(topic, turn_index=0):
+def fallback_turn(topic, language=DEFAULT_LANGUAGE, turn_index=0):
     """A known-good turn for `topic`, chosen by index so demos are repeatable."""
-    bank = _bank_for(topic)
+    bank = _bank_for(topic, language)
     return copy.deepcopy(bank[turn_index % len(bank)])
 
 
-def demo_bank_size(topic):
-    """How many distinct canned turns exist for a topic.
+def demo_bank_size(topic, language=DEFAULT_LANGUAGE):
+    """How many distinct canned turns exist for a topic in a language.
 
     The index wraps past the end of the bank, so a demo session longer than
     this repeats itself. Callers cap the session length with it.
     """
-    return len(_bank_for(topic))
+    return len(_bank_for(topic, language))
 
 
 # --- public API ------------------------------------------------------------
 
-def get_next_turn(topic, due_items=None, history=None, turn_index=0):
+def get_next_turn(topic, language=DEFAULT_LANGUAGE, due_items=None,
+                  history=None, turn_index=0):
     """Produce the next tutor turn. Never raises.
 
-    Returns a dict with `tutor_message_es`, `tutor_message_en`, `target_word`,
+    Returns a dict with `tutor_message`, `tutor_message_en`, `target_word`,
     `replies`, plus `provider` and `from_cache` for debugging a bad demo turn.
     """
     if settings.DEMO_MODE:
-        turn = fallback_turn(topic, turn_index)
+        turn = fallback_turn(topic, language, turn_index)
         turn.update(provider='demo', from_cache=True)
         return turn
 
     user_content = (
+        f'Language being learned: {language}\n'
         f'Topic: {_topic_label(topic)}\n\n'
         f'Vocabulary due for review:\n{_format_vocab(due_items)}\n\n'
         f'Conversation so far:\n{_format_history(history)}\n\n'
@@ -580,33 +661,34 @@ def get_next_turn(topic, due_items=None, history=None, turn_index=0):
     )
 
     try:
-        payload, provider = _call(CHIP_SYSTEM_PROMPT, user_content)
+        payload, provider = _call(_build_prompt(CHIP_TEMPLATE, language), user_content)
         turn = _normalise_turn(payload)
         turn.update(provider=provider, from_cache=False)
         return turn
     except Exception as exc:
         logger.warning('get_next_turn falling back (%s: %s)', type(exc).__name__, exc)
-        turn = fallback_turn(topic, turn_index)
+        turn = fallback_turn(topic, language, turn_index)
         turn.update(provider='fallback', from_cache=True)
         return turn
 
 
-def evaluate_freetext_reply(topic, target_item, user_reply, history=None, turn_index=0):
+def evaluate_freetext_reply(topic, language, target_item, user_reply,
+                            history=None, turn_index=0):
     """Grade a typed reply and continue the conversation. Never raises.
 
     On failure the result carries `graded=False`, and the caller must skip the
     SM-2 update - an outage must not record an answer the learner never gave.
     """
-    backup = fallback_turn(topic, turn_index)
+    backup = fallback_turn(topic, language, turn_index)
 
     if not _clean_str(user_reply):
         return {
             'verdict': 'blank',
             'graded': True,
             'used_target_word': False,
-            'corrected_es': '',
+            'corrected': '',
             'feedback_en': 'Nothing came through - try typing an answer.',
-            'tutor_message_es': backup['tutor_message_es'],
+            'tutor_message': backup['tutor_message'],
             'tutor_message_en': backup['tutor_message_en'],
             'replies': backup['replies'],
             'provider': 'local',
@@ -618,18 +700,19 @@ def evaluate_freetext_reply(topic, target_item, user_reply, history=None, turn_i
         # out; the caller decides whether to expose typing during a demo.
         logger.info('DEMO_MODE is on but free text needs a live call')
 
-    target_es = getattr(target_item, 'spanish', None) or _clean_str(target_item)
+    target_term = getattr(target_item, 'term', None) or _clean_str(target_item)
     target_en = getattr(target_item, 'english', '')
     user_content = (
+        f'Language being learned: {language}\n'
         f'Topic: {_topic_label(topic)}\n'
-        f'Target vocabulary: {target_es}' + (f' ({target_en})' if target_en else '') + '\n\n'
+        f'Target vocabulary: {target_term}' + (f' ({target_en})' if target_en else '') + '\n\n'
         f'Conversation so far:\n{_format_history(history)}\n\n'
         f"Learner's typed reply: {user_reply}\n\n"
         'Grade the reply, then continue the conversation.'
     )
 
     try:
-        payload, provider = _call(EVAL_SYSTEM_PROMPT, user_content)
+        payload, provider = _call(_build_prompt(EVAL_TEMPLATE, language), user_content)
         result = _normalise_evaluation(payload, backup)
         result.update(provider=provider, from_cache=False)
         return result
@@ -642,9 +725,9 @@ def evaluate_freetext_reply(topic, target_item, user_reply, history=None, turn_i
             'verdict': None,
             'graded': False,
             'used_target_word': False,
-            'corrected_es': '',
+            'corrected': '',
             'feedback_en': FALLBACK_FEEDBACK_EN,
-            'tutor_message_es': backup['tutor_message_es'],
+            'tutor_message': backup['tutor_message'],
             'tutor_message_en': backup['tutor_message_en'],
             'replies': backup['replies'],
             'provider': 'fallback',

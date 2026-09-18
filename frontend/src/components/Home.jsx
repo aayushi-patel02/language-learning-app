@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { getTopics } from '../api'
+import { formatDue } from '../dates'
 import { useAuth } from '../auth'
 import { TOPICS } from '../topics'
+import Chevron from './Chevron'
+import LanguagePicker from './LanguagePicker'
 import TopicIcon from './TopicIcon'
 
 export default function Home() {
@@ -11,72 +14,103 @@ export default function Home() {
   // Null until the request lands, so the cards can render immediately and the
   // counts fill in. Avoids a spinner on the very first screen.
   const [loads, setLoads] = useState(null)
+  const [streak, setStreak] = useState(0)
+  const [nextReview, setNextReview] = useState(null)
 
   useEffect(() => {
     getTopics()
-      .then(({ data }) => setLoads(data.topics))
+      .then(({ data }) => {
+        setLoads(data.topics)
+        setStreak(data.streak ?? 0)
+        setNextReview(data.next_review ?? null)
+      })
       .catch(() => setLoads([])) // counts are a bonus, never a blocker
-  }, [])
+    // Keyed on the language: the counts are per language, so switching has
+    // to pull them again rather than leave the old ones on screen.
+  }, [user?.learning_language])
 
   const loadFor = (id) => loads?.find((topic) => topic.id === id)
   const totalDue = loads?.reduce((sum, topic) => sum + topic.due, 0) ?? 0
 
   return (
-    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-10 pb-12">
+    <div className="app-column mx-auto flex min-h-full max-w-md flex-col px-5 pt-10 pb-28">
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Charla</h1>
           <p className="mt-1.5 text-sm leading-relaxed text-muted">
-            Practise Spanish in conversation. What you get wrong comes back sooner.
+            Practise {user?.learning_language ?? 'a new language'} in
+            conversation. What you get wrong comes back sooner.
           </p>
         </div>
-        <Link
-          to="/profile"
-          aria-label="Your profile"
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
-                     border border-line bg-white text-2xl transition-colors
-                     hover:border-ink/20"
-        >
-          {user?.avatar ?? '🦉'}
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Same shape as the avatar beside it: a plain bordered box, so
+              the two read as one pair of controls rather than a badge
+              stuck next to a button. Shown even at zero - a language you
+              have not started should say so rather than leave a gap, and
+              it reads the same at zero as at ten rather than greying out.
+              Goes to progress, which is the only place the days behind the
+              number are. */}
+          <Link
+            to="/progress"
+            aria-label={
+              streak > 0
+                ? `${streak} day${streak === 1 ? '' : 's'} in a row. See your progress.`
+                : 'No streak yet. See your progress.'
+            }
+            // min-w rather than a fixed width: square at the streak lengths
+            // that matter, but free to grow past two digits instead of
+            // clipping the number.
+            className="flex h-12 min-w-12 shrink-0 items-center justify-center
+                       gap-1 rounded-2xl border border-line bg-white px-1
+                       text-sm font-extrabold transition-colors
+                       hover:border-ink/20"
+          >
+            <FlameIcon className="h-5 w-5 text-topic-morning" />
+            <span>{streak}</span>
+          </Link>
+
+          <Link
+            to="/profile"
+            aria-label="Your profile"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+                       border border-line bg-white text-2xl transition-colors
+                       hover:border-ink/20"
+          >
+            {user?.avatar ?? '🦉'}
+          </Link>
+        </div>
       </header>
 
-      <nav className="mt-4 flex gap-2">
-        <Link
-          to="/vocabulary"
-          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full
-                     border border-line bg-white px-3 text-xs font-bold
-                     transition-colors hover:border-ink/20"
-        >
-          Words
-        </Link>
-        <Link
-          to="/progress"
-          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full
-                     border border-line bg-white px-3 text-xs font-bold
-                     transition-colors hover:border-ink/20"
-        >
-          Progress
-        </Link>
-      </nav>
+      <div className="mt-4">
+        <LanguagePicker />
+      </div>
 
       {loads !== null && (
         <div
           className={`mt-6 rounded-2xl px-4 py-3.5 ${
-            totalDue > 0 ? 'bg-success-soft' : 'bg-surface'
+            totalDue > 0 ? 'bg-learner-soft' : 'bg-surface'
           }`}
         >
           {totalDue > 0 ? (
             <p className="text-sm">
-              <span className="text-base font-extrabold text-success">
+              <span className="text-base font-extrabold text-learner">
                 {totalDue}
               </span>
-              <span className="font-semibold text-success"> words</span>
+              <span className="font-semibold text-learner"> words</span>
               <span className="text-muted"> ready to review today</span>
             </p>
           ) : (
-            <p className="text-sm text-muted">
-              Nothing due today. Pick a topic to learn new words.
+            // Opening on the word "Nothing" made a finished day read as an
+            // empty one. Say what is already scheduled instead.
+            <p className="text-sm">
+              <span className="font-semibold text-learner">All caught up.</span>
+              <span className="text-muted">
+                {nextReview
+                  ? ` ${nextReview.count} ${
+                      nextReview.count === 1 ? 'word comes' : 'words come'
+                    } back ${formatDue(nextReview.date)}.`
+                  : ' Pick a topic to start learning.'}
+              </span>
             </p>
           )}
         </div>
@@ -105,12 +139,8 @@ export default function Home() {
               <TopicLoad load={loadFor(topic.id)} accent={topic.accent} />
             </span>
 
-            <span
-              aria-hidden="true"
-              className="shrink-0 text-muted transition group-hover:translate-x-0.5
-                         group-hover:text-ink"
-            >
-              &rsaquo;
+            <span className="shrink-0 text-muted transition-colors group-hover:text-ink">
+              <Chevron className="h-5 w-5" />
             </span>
           </Link>
         ))}
@@ -136,7 +166,7 @@ function TopicLoad({ load, accent }) {
 
   if (load.due === 0 && load.new === 0) {
     return (
-      <span className="mt-1.5 block text-xs font-semibold text-success">
+      <span className="mt-1.5 block text-xs font-semibold text-learner">
         All caught up
       </span>
     )
@@ -155,5 +185,31 @@ function TopicLoad({ load, accent }) {
         <span className="font-medium text-muted">{load.new} new</span>
       )}
     </span>
+  )
+}
+
+
+function FlameIcon({ className = '' }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className || 'h-4 w-4'}
+    >
+      {/* A flame, not a droplet. A symmetric shape tapering to a smooth
+          point is a drop of water whatever colour it is painted; fire
+          needs the tip to lean and the left edge to hook back inward.
+          Both paths still balance about x=12 so the icon sits centred. */}
+      <path
+        d="M12 2.4C12 6.4 15.9 7.7 17.3 11c1.4 3.2.6 6.6-2 8.4
+           -1.1.8-2.3 1.2-3.3 1.2-3.8 0-6.6-2.8-6.6-6 0-2 .9-3.4 2-4.3
+           .3 1.4 1.1 2.2 2.1 2.3-.1-2.8.7-6 2.5-10.2Z"
+      />
+      <path
+        d="M12 12.2c1.2 1.4 2.2 2.6 2.2 4.1a2.2 2.2 0 0 1-4.4 0c0-1.5 1-2.7 2.2-4.1Z"
+        opacity=".45"
+      />
+    </svg>
   )
 }

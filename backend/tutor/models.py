@@ -16,6 +16,21 @@ TOPIC_CHOICES = [
 
 TOPIC_SLUGS = [slug for slug, _label in TOPIC_CHOICES]
 
+# The languages Charla can teach. A language earns a place here only once
+# seed_vocab has vocabulary for it: the scheduler picks the words a lesson
+# drills, so offering a language with an empty vocabulary table would open a
+# lesson with nothing in it. The profile picker is built from this list for
+# exactly that reason.
+LANGUAGE_CHOICES = [
+    ('Spanish', 'Spanish'),
+    ('French', 'French'),
+    ('German', 'German'),
+    ('Hindi', 'Hindi'),
+]
+
+LANGUAGES = [code for code, _label in LANGUAGE_CHOICES]
+DEFAULT_LANGUAGE = 'Spanish'
+
 
 def default_turn_limit():
     """Read the turn limit at row-creation time, not at migration time."""
@@ -42,7 +57,11 @@ class Profile(models.Model):
     avatar = models.CharField(max_length=8, default='🦉')
 
     native_language = models.CharField(max_length=40, default='English')
-    learning_language = models.CharField(max_length=40, default='Spanish')
+    # Constrained to the languages that actually have vocabulary seeded, so
+    # a profile can never point a lesson at an empty table.
+    learning_language = models.CharField(
+        max_length=40, choices=LANGUAGE_CHOICES, default=DEFAULT_LANGUAGE,
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -56,14 +75,24 @@ class Profile(models.Model):
 
 
 class VocabItem(models.Model):
-    """One Spanish word or phrase the tutor can drill, scoped to a topic."""
+    """One word or phrase the tutor can drill, scoped to a language and topic."""
 
-    spanish = models.CharField(max_length=200)
+    language = models.CharField(
+        max_length=20, choices=LANGUAGE_CHOICES,
+        default=DEFAULT_LANGUAGE, db_index=True,
+    )
+    # The word in the language being learned. Named neutrally because the
+    # same row shape holds 'despertarse', 'se réveiller' and 'उठना'.
+    term = models.CharField(max_length=200)
+    # How the term sounds, for languages an English beginner cannot read at
+    # all. Blank for the Latin-script languages, where the spelling already
+    # does this job and a transliteration would just be noise.
+    romanisation = models.CharField(max_length=200, blank=True)
     english = models.CharField(max_length=200)
     topic = models.CharField(max_length=32, choices=TOPIC_CHOICES, db_index=True)
 
     part_of_speech = models.CharField(max_length=32, blank=True)
-    example_es = models.CharField(max_length=300, blank=True)
+    example = models.CharField(max_length=300, blank=True)
     example_en = models.CharField(max_length=300, blank=True)
 
     # 1 = introduce first, 3 = only once the basics are solid.
@@ -72,16 +101,18 @@ class VocabItem(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['topic', 'difficulty', 'spanish']
+        ordering = ['language', 'topic', 'difficulty', 'term']
         constraints = [
+            # Language is part of the key: 'tarde' is a Spanish word and
+            # every language is free to reuse a spelling.
             models.UniqueConstraint(
-                fields=['topic', 'spanish'],
-                name='uniq_vocabitem_topic_spanish',
+                fields=['language', 'topic', 'term'],
+                name='uniq_vocabitem_language_topic_term',
             ),
         ]
 
     def __str__(self):
-        return f'{self.spanish} → {self.english}'
+        return f'{self.term} → {self.english} ({self.language})'
 
 
 class UserVocabState(models.Model):
@@ -118,7 +149,7 @@ class UserVocabState(models.Model):
     lapses = models.PositiveIntegerField(default=0)
 
     class Meta:
-        ordering = ['due_date', 'item__spanish']
+        ordering = ['due_date', 'item__term']
         constraints = [
             models.UniqueConstraint(
                 fields=['user', 'item'],
@@ -127,7 +158,7 @@ class UserVocabState(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.user.username} · {self.item.spanish} (due {self.due_date})'
+        return f'{self.user.username} · {self.item.term} (due {self.due_date})'
 
     @property
     def is_due(self):
@@ -168,6 +199,14 @@ class ConversationSession(models.Model):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')
     topic = models.CharField(max_length=32, choices=TOPIC_CHOICES)
+
+    # Pinned when the session starts rather than read from the profile at each
+    # turn. Switching the profile to French halfway through a Spanish lesson
+    # would otherwise leave the conversation answering itself in two languages.
+    language = models.CharField(
+        max_length=20, choices=LANGUAGE_CHOICES,
+        default=DEFAULT_LANGUAGE, db_index=True,
+    )
 
     # The vocab this session was built to practise, chosen by the SM-2 scheduler
     # when the session starts.
@@ -228,9 +267,9 @@ class Turn(models.Model):
     index = models.PositiveSmallIntegerField()
 
     # --- what the tutor said ---
-    tutor_message_es = models.TextField()
+    tutor_message = models.TextField()
     tutor_message_en = models.TextField(blank=True)
-    # List of {"es": ..., "en": ..., "is_correct": bool} dicts backing the
+    # List of {"text": ..., "en": ..., "is_correct": bool} dicts backing the
     # tappable reply chips. Empty when the turn is free-text only.
     suggested_replies = models.JSONField(default=list, blank=True)
     # Scaffolding for the free-text answer: a frame with the hard part left
@@ -253,7 +292,7 @@ class Turn(models.Model):
     # SM-2 grade 0-5 derived from the reply; feeds sm2.review().
     sm2_quality = models.PositiveSmallIntegerField(null=True, blank=True)
     feedback_en = models.TextField(blank=True)
-    corrected_es = models.CharField(max_length=300, blank=True)
+    corrected = models.CharField(max_length=300, blank=True)
 
     # --- provenance, useful when debugging a bad demo turn ---
     llm_provider = models.CharField(max_length=32, blank=True)
@@ -272,7 +311,7 @@ class Turn(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.session_id} #{self.index}: {self.tutor_message_es[:40]}'
+        return f'{self.session_id} #{self.index}: {self.tutor_message[:40]}'
 
     @property
     def is_answered(self):

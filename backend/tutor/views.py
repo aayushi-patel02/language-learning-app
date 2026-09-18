@@ -16,6 +16,7 @@ from datetime import date, timedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -26,6 +27,9 @@ from rest_framework.views import APIView
 # call time, so tests can patch it without the reference being frozen here.
 from . import insights, llm, sm2
 from .models import (
+    DEFAULT_LANGUAGE,
+    LANGUAGE_CHOICES,
+    LANGUAGES,
     TOPIC_CHOICES,
     TOPIC_SLUGS,
     ConversationSession,
@@ -65,12 +69,23 @@ def current_learner(request):
 def _history(session):
     """The conversation so far, in the shape the prompts expect."""
     return [
-        {'tutor': turn.tutor_message_es, 'user': turn.user_reply}
+        {'tutor': turn.tutor_message, 'user': turn.user_reply}
         for turn in session.turns.order_by('index')
     ]
 
 
-def _resolve_target(topic, target_word, planned_item):
+def learner_language(user):
+    """The language this learner is studying.
+
+    Falls back to the default rather than raising: the seeded demo learner
+    has no profile, and a lesson still has to start for them.
+    """
+    profile = getattr(user, 'profile', None)
+    language = getattr(profile, 'learning_language', '') or DEFAULT_LANGUAGE
+    return language if language in LANGUAGES else DEFAULT_LANGUAGE
+
+
+def _resolve_target(topic, language, target_word, planned_item):
     """The vocab item a turn actually drills.
 
     The scheduler decides what *should* be practised and tells the model, but
@@ -79,10 +94,14 @@ def _resolve_target(topic, target_word, planned_item):
     follow the vocabulary the learner actually saw, or the recap credits a word
     they were never shown - so match the turn's own target back to the topic's
     vocab, and only fall back to the plan when it doesn't match anything.
+
+    Scoped to the session's language as well as its topic, because a spelling
+    is only unique within a language.
     """
     word = str(target_word or '').strip()
     if word:
-        match = VocabItem.objects.filter(topic=topic, spanish__iexact=word).first()
+        match = VocabItem.objects.filter(
+            language=language, topic=topic, term__iexact=word).first()
         if match is not None:
             return match
     return planned_item
@@ -92,12 +111,13 @@ def _create_turn(session, index, planned_item, result):
     return Turn.objects.create(
         session=session,
         index=index,
-        tutor_message_es=result['tutor_message_es'],
+        tutor_message=result['tutor_message'],
         tutor_message_en=result['tutor_message_en'],
         sentence_starter=result.get('sentence_starter', ''),
         suggested_replies=result['replies'],
         target_item=_resolve_target(
-            session.topic, result.get('target_word'), planned_item),
+            session.topic, session.language, result.get('target_word'),
+            planned_item),
         llm_provider=result['provider'],
         from_cache=result['from_cache'],
     )
@@ -106,8 +126,78 @@ def _create_turn(session, index, planned_item, result):
 def _correct_option(chips):
     for chip in chips or []:
         if chip.get('is_correct'):
-            return chip.get('es', '')
+            return chip.get('text', '')
     return ''
+
+
+class LanguageListView(APIView):
+    """GET /api/languages/ - what Charla can actually teach.
+
+    Built from the vocabulary table rather than from a constant, so the
+    profile picker can only ever offer a language that has words behind it.
+    Offering one that does not is how the picker came to promise seven
+    languages while every lesson ran in Spanish.
+    """
+
+    def get(self, request):
+        counts = dict(
+            VocabItem.objects.values_list('language')
+            .annotate(n=Count('id'))
+            .values_list('language', 'n')
+        )
+        return Response({
+            'languages': [
+                {'code': code, 'label': label, 'word_count': counts[code]}
+                for code, label in LANGUAGE_CHOICES
+                if counts.get(code)
+            ],
+            'current': learner_language(current_learner(request)),
+        })
+
+
+def streak_from(active_days, today):
+    """Consecutive days of practice ending today, or zero if already broken.
+
+    Yesterday still counts while today is unfinished, so a streak does not
+    appear to reset the moment the clock rolls over.
+    """
+    streak = 0
+    cursor = today
+    if today not in active_days and (today - timedelta(days=1)) in active_days:
+        cursor = today - timedelta(days=1)
+    while cursor in active_days:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
+def practice_days(user, language):
+    """The local dates this learner answered something in this language.
+
+    Local, not UTC: the streak is compared against `timezone.localdate()`,
+    and mixing the two would end a streak early for anyone whose evening
+    practice lands on the next UTC day.
+    """
+    stamps = Turn.objects.filter(
+        session__user=user, session__language=language,
+        answered_at__isnull=False,
+    ).values_list('answered_at', flat=True)
+    return {timezone.localtime(stamp).date() for stamp in stamps}
+
+
+def next_review_after(user, language, today):
+    """When the soonest batch of words comes back, and how many."""
+    upcoming = UserVocabState.objects.filter(
+        user=user, item__language=language,
+        total_reviews__gt=0, due_date__gt=today,
+    ).order_by('due_date')
+    first = upcoming.first()
+    if first is None:
+        return None
+    return {
+        'date': first.due_date,
+        'count': upcoming.filter(due_date=first.due_date).count(),
+    }
 
 
 class TopicListView(APIView):
@@ -123,6 +213,7 @@ class TopicListView(APIView):
 
     def get(self, request):
         user = current_learner(request)
+        language = learner_language(user)
         today = timezone.localdate()
 
         states = {
@@ -133,7 +224,8 @@ class TopicListView(APIView):
         payload = []
         for slug, label in TOPIC_CHOICES:
             due = new = scheduled = 0
-            items = VocabItem.objects.filter(topic=slug).only('id')
+            items = VocabItem.objects.filter(
+                language=language, topic=slug).only('id')
             for item in items:
                 state = states.get(item.pk)
                 if state is None or state.total_reviews == 0:
@@ -152,19 +244,29 @@ class TopicListView(APIView):
                 'scheduled': scheduled,  # known, not due yet
             })
 
-        return Response({'topics': payload})
+        return Response({
+            'topics': payload,
+            'streak': streak_from(practice_days(user, language), today),
+            # Lets the home screen say when work comes back instead of only
+            # that there is none today.
+            'next_review': next_review_after(user, language, today),
+        })
 
 
 def _word_payload(item, state):
     """One vocabulary row, shared by the library and the detail screen."""
     return {
         'id': item.pk,
-        'spanish': item.spanish,
+        'term': item.term,
+        # Empty for the Latin-script languages; the library only renders
+        # it when there is something to render.
+        'romanisation': item.romanisation,
+        'language': item.language,
         'english': item.english,
         'topic': item.topic,
         'topic_label': item.get_topic_display(),
         'part_of_speech': item.part_of_speech,
-        'example_es': item.example_es,
+        'example': item.example,
         'example_en': item.example_en,
         'shelf': state.shelf,
         'is_saved': state.is_saved,
@@ -189,7 +291,8 @@ class VocabularyListView(APIView):
 
     def get(self, request):
         user = current_learner(request)
-        states = sm2.ensure_states(user).select_related('item')
+        states = sm2.ensure_states(
+            user, language=learner_language(user)).select_related('item')
 
         shelves = {'due': [], 'learning': [], 'mastered': [], 'new': []}
         saved = []
@@ -200,11 +303,11 @@ class VocabularyListView(APIView):
                 saved.append(payload)
 
         # Ordering per shelf: the most useful thing first in each case.
-        shelves['due'].sort(key=lambda w: (w['due_date'] or date.max, w['spanish']))
-        shelves['learning'].sort(key=lambda w: (w['due_date'] or date.max, w['spanish']))
+        shelves['due'].sort(key=lambda w: (w['due_date'] or date.max, w['term']))
+        shelves['learning'].sort(key=lambda w: (w['due_date'] or date.max, w['term']))
         shelves['mastered'].sort(key=lambda w: -w['repetitions'])
-        shelves['new'].sort(key=lambda w: (w['topic'], w['spanish']))
-        saved.sort(key=lambda w: w['spanish'])
+        shelves['new'].sort(key=lambda w: (w['topic'], w['term']))
+        saved.sort(key=lambda w: w['term'])
 
         recent_ids = list(
             Turn.objects.filter(
@@ -255,7 +358,7 @@ class WordDetailView(APIView):
         appearances = [
             {
                 'session_id': turn.session_id,
-                'tutor_message_es': turn.tutor_message_es,
+                'tutor_message': turn.tutor_message,
                 'tutor_message_en': turn.tutor_message_en,
                 'user_reply': turn.user_reply,
                 'was_correct': turn.was_correct,
@@ -291,10 +394,16 @@ class ProgressView(APIView):
 
     def get(self, request):
         user = current_learner(request)
+        language = learner_language(user)
         today = timezone.localdate()
 
+        # Scoped to the language being studied, like the home screen and the
+        # library. Unscoped, the by-topic totals counted all four languages'
+        # vocabulary, so a topic of twenty words reported progress out of
+        # eighty, and a streak built in Spanish showed up under Hindi.
         states = list(
-            UserVocabState.objects.filter(user=user).select_related('item')
+            UserVocabState.objects.filter(user=user, item__language=language)
+            .select_related('item')
         )
         # A row exists as soon as the scheduler looks at a word, so "started"
         # has to mean actually answered at least once.
@@ -309,7 +418,8 @@ class ProgressView(APIView):
 
         topics = []
         for slug, label in TOPIC_CHOICES:
-            topic_total = VocabItem.objects.filter(topic=slug).count()
+            topic_total = VocabItem.objects.filter(
+                language=language, topic=slug).count()
             topic_started = [s for s in started if s.item.topic == slug]
             topics.append({
                 'id': slug,
@@ -321,25 +431,16 @@ class ProgressView(APIView):
 
         answered = list(
             Turn.objects.filter(
-                session__user=user, answered_at__isnull=False
+                session__user=user, session__language=language,
+                answered_at__isnull=False,
             )
             .select_related('session')
             .only('answered_at', 'was_correct', 'feedback_en', 'session__started_at')
         )
 
         # --- streak -----------------------------------------------------
-        # Any answered turn counts as practice for that day. Walking back
-        # from today rather than from the most recent day of activity, so a
-        # streak that has already been broken reads as zero.
-        active_days = {turn.answered_at.date() for turn in answered}
-        streak = 0
-        cursor = today
-        if today not in active_days and (today - timedelta(days=1)) in active_days:
-            # Yesterday still counts: the streak is alive until today ends.
-            cursor = today - timedelta(days=1)
-        while cursor in active_days:
-            streak += 1
-            cursor -= timedelta(days=1)
+        active_days = {timezone.localtime(t.answered_at).date() for t in answered}
+        streak = streak_from(active_days, today)
 
         # --- this week against last week --------------------------------
         week_start = today - timedelta(days=6)
@@ -415,7 +516,7 @@ class ProgressView(APIView):
             'hardest_words': [
                 {
                     'id': state.item_id,
-                    'spanish': state.item.spanish,
+                    'term': state.item.term,
                     'english': state.item.english,
                     'lapses': state.lapses,
                     'accuracy': round(state.accuracy, 2)
@@ -442,20 +543,38 @@ class StartSessionView(APIView):
             )
 
         user = current_learner(request)
+        language = learner_language(user)
+
+        # Optional: the word the learner asked for by name, from its detail
+        # screen. Scoped to this topic and language so a stale or hand-typed
+        # id cannot smuggle a word from elsewhere into the plan.
+        first_item = None
+        word_id = request.data.get('word_id')
+        if word_id not in (None, ''):
+            first_item = VocabItem.objects.filter(
+                pk=word_id, topic=topic, language=language).first()
+            if first_item is None:
+                return Response(
+                    {'detail': f'Word {word_id!r} is not in {topic!r} for {language}.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         turn_limit = settings.SESSION_TURN_LIMIT
         if settings.DEMO_MODE:
             # The canned bank wraps, so a longer session would replay the same
             # questions. Better a short demo than a visibly repeating one.
-            turn_limit = min(turn_limit, llm.demo_bank_size(topic))
+            turn_limit = min(turn_limit, llm.demo_bank_size(topic, language))
 
-        items = sm2.select_session_items(user, topic, limit=turn_limit)
+        items = sm2.select_session_items(
+            user, topic, limit=turn_limit, language=language,
+            first_item=first_item)
         # Never plan more turns than there is vocabulary to drill. Otherwise
         # the tail of the session has no target item, so those turns grade
         # nothing and the recap silently under-reports.
         turn_limit = min(turn_limit, len(items))
         if not items:
             return Response(
-                {'detail': f'No vocabulary seeded for {topic!r}. '
+                {'detail': f'No {language} vocabulary seeded for {topic!r}. '
                            f'Run: python manage.py seed_vocab'},
                 status=status.HTTP_409_CONFLICT,
             )
@@ -463,12 +582,13 @@ class StartSessionView(APIView):
         # Called before opening the transaction so a slow provider doesn't hold
         # a write lock for the length of a network round trip.
         result = llm.get_next_turn(
-            topic, due_items=[items[0]], history=[], turn_index=0)
+            topic, language, due_items=[items[0]], history=[], turn_index=0)
 
         with transaction.atomic():
             session = ConversationSession.objects.create(
                 user=user,
                 topic=topic,
+                language=language,
                 turn_limit=turn_limit,
                 planned_item_ids=[item.pk for item in items],
             )
@@ -544,6 +664,7 @@ class NextTurnView(APIView):
             # it instead of paying for a second call.
             result = graded.get('continuation') or llm.get_next_turn(
                 session.topic,
+                session.language,
                 due_items=[target] if target else [],
                 history=_history(session),
                 turn_index=next_index,
@@ -557,7 +678,7 @@ class NextTurnView(APIView):
                 'graded': graded['graded'],
                 'quality': graded['quality'],
                 'feedback_en': graded['feedback_en'],
-                'corrected_es': graded['corrected_es'],
+                'corrected': graded['corrected'],
                 'interval_days': sm2_result.interval_days if sm2_result else None,
                 'due_date': sm2_result.due_date if sm2_result else None,
             },
@@ -586,9 +707,9 @@ class NextTurnView(APIView):
             'graded': True,
             'was_correct': was_correct,
             'quality': sm2.quality_for_chip(was_correct),
-            'user_reply': chosen.get('es', ''),
+            'user_reply': chosen.get('text', ''),
             'feedback_en': '' if was_correct else chosen.get('why_wrong', ''),
-            'corrected_es': '' if was_correct else _correct_option(chips),
+            'corrected': '' if was_correct else _correct_option(chips),
             'continuation': None,
         }
 
@@ -596,6 +717,7 @@ class NextTurnView(APIView):
         text = str(request.data.get('text') or '').strip()
         evaluation = llm.evaluate_freetext_reply(
             session.topic,
+            session.language,
             current.target_item,
             text,
             history=_history(session),
@@ -617,7 +739,7 @@ class NextTurnView(APIView):
             'quality': quality,
             'user_reply': text,
             'feedback_en': evaluation['feedback_en'],
-            'corrected_es': evaluation['corrected_es'],
+            'corrected': evaluation['corrected'],
             'continuation': evaluation,
         }
 
@@ -629,7 +751,7 @@ class NextTurnView(APIView):
             current.was_correct = graded['was_correct']
             current.sm2_quality = graded['quality']
             current.feedback_en = graded['feedback_en']
-            current.corrected_es = graded['corrected_es']
+            current.corrected = graded['corrected']
             current.answered_at = timezone.now()
             current.save()
 
@@ -681,7 +803,11 @@ class SessionRecapView(APIView):
             seen.add(item.pk)
             state = states.get(item.pk)
             words.append({
-                'spanish': item.spanish,
+                'term': item.term,
+                # Blank for the Latin-script languages, so the recap only
+                # shows a second line where there is one to show.
+                'romanisation': item.romanisation,
+                'language': item.language,
                 'english': item.english,
                 'was_correct': turn.was_correct,
                 'graded': turn.sm2_quality is not None,

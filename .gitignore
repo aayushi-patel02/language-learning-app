@@ -19,3 +19,6 @@ frontend/.vite/
 .DS_Store
 .vscode/
 .idea/
+
+# Local editor/agent scratch
+.claude/

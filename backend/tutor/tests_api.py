@@ -12,12 +12,15 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework.authtoken.models import Token
 
 from . import llm, sm2
 from .models import (
     DAILY_ROUTINE,
+    LANGUAGES,
     TOPIC_SLUGS,
     ConversationSession,
+    Profile,
     Turn,
     UserVocabState,
     VocabItem,
@@ -29,15 +32,15 @@ TOPIC = DAILY_ROUTINE
 def make_turn_payload(marker='one'):
     """A well-formed adapter result, with the correct reply in the middle."""
     return {
-        'tutor_message_es': f'¿Pregunta {marker}?',
+        'tutor_message': f'¿Pregunta {marker}?',
         'tutor_message_en': f'Question {marker}?',
         'target_word': 'levantarse',
         'replies': [
-            {'id': 0, 'es': 'Respuesta mala.', 'en': 'Bad answer.',
+            {'id': 0, 'text': 'Respuesta mala.', 'en': 'Bad answer.',
              'is_correct': False, 'why_wrong': 'needs the reflexive pronoun'},
-            {'id': 1, 'es': 'Respuesta buena.', 'en': 'Good answer.',
+            {'id': 1, 'text': 'Respuesta buena.', 'en': 'Good answer.',
              'is_correct': True, 'why_wrong': ''},
-            {'id': 2, 'es': 'Otra mala.', 'en': 'Another bad one.',
+            {'id': 2, 'text': 'Otra mala.', 'en': 'Another bad one.',
              'is_correct': False, 'why_wrong': 'wrong verb person'},
         ],
         'provider': 'stub',
@@ -56,9 +59,9 @@ def stub_eval(**overrides):
         'verdict': 'perfect',
         'graded': True,
         'used_target_word': True,
-        'corrected_es': '',
+        'corrected': '',
         'feedback_en': 'Perfecto!',
-        'tutor_message_es': '¿Y luego?',
+        'tutor_message': '¿Y luego?',
         'tutor_message_en': 'And then?',
         'replies': make_turn_payload()['replies'],
         'provider': 'stub',
@@ -78,7 +81,7 @@ class ApiTestCase(TestCase):
         # run off the end of the plan.
         for n in range(10):
             VocabItem.objects.create(
-                spanish=f'palabra{n:02d}', english=f'word{n}',
+                term=f'palabra{n:02d}', english=f'word{n}',
                 topic=TOPIC, difficulty=1)
 
     def start(self, topic=TOPIC):
@@ -263,7 +266,7 @@ class StartSessionTests(ApiTestCase):
         self.assertNotIn('is_correct', serialised)
         self.assertNotIn('why_wrong', serialised)
         for option in body['turn']['reply_options']:
-            self.assertEqual(set(option), {'id', 'es', 'en'})
+            self.assertEqual(set(option), {'id', 'text', 'en'})
 
     def test_session_records_an_ordered_plan(self):
         self.start()
@@ -314,7 +317,7 @@ class TargetResolutionTests(ApiTestCase):
         # DEMO_MODE and fallback turns come from a fixed bank whose content may
         # not be the word the scheduler queued up.
         shown = VocabItem.objects.create(
-            spanish='la mesa', english='table', topic=TOPIC, difficulty=2)
+            term='la mesa', english='table', topic=TOPIC, difficulty=2)
         payload = dict(make_turn_payload(), target_word='la mesa')
         with mock.patch.object(llm, 'get_next_turn',
                                side_effect=lambda *a, **k: dict(payload)):
@@ -328,7 +331,7 @@ class TargetResolutionTests(ApiTestCase):
 
     def test_matching_is_case_insensitive(self):
         shown = VocabItem.objects.create(
-            spanish='la mesa', english='table', topic=TOPIC)
+            term='la mesa', english='table', topic=TOPIC)
         payload = dict(make_turn_payload(), target_word='LA MESA')
         with mock.patch.object(llm, 'get_next_turn',
                                side_effect=lambda *a, **k: dict(payload)):
@@ -348,7 +351,7 @@ class TargetResolutionTests(ApiTestCase):
 
     def test_target_word_from_another_topic_is_ignored(self):
         VocabItem.objects.create(
-            spanish='el tren', english='train', topic='travel_basics')
+            term='el tren', english='train', topic='travel_basics')
         payload = dict(make_turn_payload(), target_word='el tren')
         with mock.patch.object(llm, 'get_next_turn',
                                side_effect=lambda *a, **k: dict(payload)):
@@ -360,7 +363,7 @@ class TargetResolutionTests(ApiTestCase):
 
     def test_sm2_credits_the_word_that_was_shown(self):
         shown = VocabItem.objects.create(
-            spanish='la mesa', english='table', topic=TOPIC)
+            term='la mesa', english='table', topic=TOPIC)
         payload = dict(make_turn_payload(), target_word='la mesa')
         with mock.patch.object(llm, 'get_next_turn',
                                side_effect=lambda *a, **k: dict(payload)):
@@ -451,7 +454,7 @@ class DemoModeSessionLengthTests(ApiTestCase):
 
         lines = list(
             Turn.objects.filter(session_id=session_id)
-            .values_list('tutor_message_es', flat=True))
+            .values_list('tutor_message', flat=True))
         self.assertEqual(len(lines), len(set(lines)), 'every turn should be distinct')
 
     @override_settings(DEMO_MODE=False, SESSION_TURN_LIMIT=8)
@@ -482,7 +485,7 @@ class ChipGradingTests(ApiTestCase):
         self.assertFalse(body['grade']['was_correct'])
         self.assertEqual(body['grade']['quality'], 2)
         self.assertEqual(body['grade']['feedback_en'], 'needs the reflexive pronoun')
-        self.assertEqual(body['grade']['corrected_es'], 'Respuesta buena.')
+        self.assertEqual(body['grade']['corrected'], 'Respuesta buena.')
 
     def test_grading_ignores_a_spoofed_is_correct_in_the_request(self):
         # The whole point of keeping the answer key server-side.
@@ -718,8 +721,9 @@ class RecapTests(ApiTestCase):
         body = self.client.get(reverse('session-recap', args=[session_id])).json()
         word = body['words'][0]
         self.assertEqual(set(word), {
-            'spanish', 'english', 'was_correct', 'graded',
-            'due_date', 'interval_days', 'repetitions', 'ease_factor'})
+            'term', 'romanisation', 'language', 'english', 'was_correct',
+            'graded', 'due_date', 'interval_days', 'repetitions',
+            'ease_factor'})
         self.assertTrue(word['was_correct'])
         self.assertEqual(word['interval_days'], 1)
         self.assertEqual(word['repetitions'], 1)
@@ -750,7 +754,7 @@ class RecapTests(ApiTestCase):
         # A fallback turn can drill a word the scheduler never queued. The
         # recap has to show its real due date, not nulls.
         VocabItem.objects.create(
-            spanish='la mesa', english='table', topic=TOPIC, difficulty=3)
+            term='la mesa', english='table', topic=TOPIC, difficulty=3)
         payload = dict(make_turn_payload(), target_word='la mesa')
         with mock.patch.object(llm, 'get_next_turn',
                                side_effect=lambda *a, **k: dict(payload)):
@@ -765,12 +769,12 @@ class RecapTests(ApiTestCase):
         session = ConversationSession.objects.get(pk=session_id)
         self.assertNotIn(
             'la mesa',
-            [item.spanish for item in session.target_items.all()],
+            [item.term for item in session.target_items.all()],
             'precondition: the drilled word is outside the plan')
 
         word = self.client.get(
             reverse('session-recap', args=[session_id])).json()['words'][0]
-        self.assertEqual(word['spanish'], 'la mesa')
+        self.assertEqual(word['term'], 'la mesa')
         self.assertIsNotNone(word['due_date'], 'due date must not be null')
         self.assertEqual(word['interval_days'], 1)
         self.assertEqual(word['repetitions'], 1)
@@ -782,7 +786,7 @@ class RecapTests(ApiTestCase):
             self.answer_chip(session_id, reply_id=1)
         body = self.client.get(reverse('session-recap', args=[session_id])).json()
         for word in body['words']:
-            with self.subTest(word=word['spanish']):
+            with self.subTest(word=word['term']):
                 if word['graded']:
                     self.assertIsNotNone(word['due_date'])
                     self.assertIsNotNone(word['interval_days'])
@@ -802,3 +806,315 @@ class RoutingTests(TestCase):
         self.assertEqual(reverse('session-start'), '/api/sessions/start/')
         self.assertEqual(reverse('session-next', args=[7]), '/api/sessions/7/next/')
         self.assertEqual(reverse('session-recap', args=[7]), '/api/sessions/7/recap/')
+
+
+class LanguageScopingTests(TestCase):
+    """Changing the learning language must change what a lesson teaches.
+
+    The picker offered seven languages while every lesson ran in Spanish.
+    These lock the fix down: the language on the profile is the language the
+    scheduler, the library and the home screen all work in.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='polyglot')
+        self.token = Token.objects.create(user=self.user)
+        Profile.objects.create(user=self.user, learning_language='Spanish')
+
+        for language, term in (('Spanish', 'levantarse'),
+                               ('French', 'se lever'),
+                               ('German', 'aufstehen'),
+                               ('Hindi', 'उठना')):
+            VocabItem.objects.create(
+                language=language, topic=TOPIC, term=term, english='to get up')
+
+    def auth(self):
+        return {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
+
+    def set_language(self, language):
+        self.user.profile.learning_language = language
+        self.user.profile.save(update_fields=['learning_language'])
+
+    def test_the_scheduler_only_offers_the_studied_language(self):
+        for language, expected in (('Spanish', 'levantarse'),
+                                   ('French', 'se lever'),
+                                   ('German', 'aufstehen'),
+                                   ('Hindi', 'उठना')):
+            with self.subTest(language=language):
+                self.set_language(language)
+                items = sm2.select_session_items(
+                    self.user, TOPIC, language=language)
+                self.assertEqual([i.term for i in items], [expected])
+
+    def test_a_session_starts_in_the_learners_language(self):
+        self.set_language('German')
+        with stub_turn():
+            response = self.client.post(
+                reverse('session-start'), {'topic': TOPIC},
+                content_type='application/json', **self.auth())
+        self.assertEqual(response.status_code, 201)
+        session = ConversationSession.objects.get()
+        self.assertEqual(session.language, 'German')
+        self.assertEqual(
+            [i.term for i in session.target_items.all()], ['aufstehen'])
+
+    def test_the_language_is_passed_to_the_model(self):
+        self.set_language('French')
+        with mock.patch.object(
+            llm, 'get_next_turn',
+            side_effect=lambda *a, **k: make_turn_payload(),
+        ) as called:
+            self.client.post(
+                reverse('session-start'), {'topic': TOPIC},
+                content_type='application/json', **self.auth())
+        # Second positional argument, right after the topic.
+        self.assertEqual(called.call_args.args[1], 'French')
+
+    def test_switching_language_mid_course_does_not_rewrite_old_sessions(self):
+        self.set_language('Spanish')
+        with stub_turn():
+            self.client.post(
+                reverse('session-start'), {'topic': TOPIC},
+                content_type='application/json', **self.auth())
+        self.set_language('Hindi')
+
+        session = ConversationSession.objects.get()
+        self.assertEqual(session.language, 'Spanish')
+
+    def test_the_library_only_holds_the_studied_language(self):
+        self.set_language('Hindi')
+        response = self.client.get(reverse('vocabulary-list'), **self.auth())
+        self.assertEqual(response.status_code, 200)
+
+        words = [
+            word
+            for shelf in response.json()['shelves'].values()
+            for word in shelf
+        ]
+        self.assertTrue(words)
+        self.assertEqual({w['language'] for w in words}, {'Hindi'})
+
+    def test_devanagari_carries_a_romanisation(self):
+        item = VocabItem.objects.get(language='Hindi', term='उठना')
+        item.romanisation = 'uthna'
+        item.save(update_fields=['romanisation'])
+
+        self.set_language('Hindi')
+        response = self.client.get(reverse('vocabulary-list'), **self.auth())
+        words = [
+            word
+            for shelf in response.json()['shelves'].values()
+            for word in shelf
+        ]
+        self.assertEqual(words[0]['romanisation'], 'uthna')
+
+    def test_the_home_screen_counts_only_the_studied_language(self):
+        self.set_language('French')
+        response = self.client.get(reverse('topic-list'), **self.auth())
+        topic = next(
+            t for t in response.json()['topics'] if t['id'] == TOPIC)
+        self.assertEqual(topic['total'], 1)
+
+    def test_only_seeded_languages_are_offered(self):
+        response = self.client.get(reverse('language-list'), **self.auth())
+        self.assertEqual(response.status_code, 200)
+        offered = {row['code'] for row in response.json()['languages']}
+        self.assertEqual(offered, set(LANGUAGES))
+
+    def test_a_language_with_no_vocabulary_is_not_offered(self):
+        VocabItem.objects.filter(language='German').delete()
+        response = self.client.get(reverse('language-list'), **self.auth())
+        offered = {row['code'] for row in response.json()['languages']}
+        self.assertNotIn('German', offered)
+
+
+class FocusWordTests(TestCase):
+    """Asking for a word by name must actually drill that word.
+
+    "Practise this topic" on a word's own page started an ordinary session, so
+    the scheduler's easiest-first order decided what came up. A difficulty-2
+    word sorts behind every difficulty-1 word and never fitted inside the turn
+    limit, so the learner practised the topic and the word they clicked stayed
+    "not started".
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='learner')
+        self.token = Token.objects.create(user=self.user)
+        Profile.objects.create(user=self.user, learning_language='Spanish')
+
+        # Eight easy words fill a whole session on their own.
+        for n in range(8):
+            VocabItem.objects.create(
+                language='Spanish', topic=TOPIC, term=f'facil{n}',
+                english=f'easy {n}', difficulty=1)
+        self.hard = VocabItem.objects.create(
+            language='Spanish', topic=TOPIC, term='vestirse',
+            english='to get dressed', difficulty=3)
+        self.other_topic = VocabItem.objects.create(
+            language='Spanish', topic='ordering_food', term='la cuenta',
+            english='the bill', difficulty=1)
+        self.other_language = VocabItem.objects.create(
+            language='German', topic=TOPIC, term='aufstehen',
+            english='to get up', difficulty=1)
+
+    def auth(self):
+        return {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
+
+    def start(self, **payload):
+        return self.client.post(
+            reverse('session-start'), {'topic': TOPIC, **payload},
+            content_type='application/json', **self.auth())
+
+    def planned(self, response):
+        session = ConversationSession.objects.get(pk=response.json()['session_id'])
+        return [
+            VocabItem.objects.get(pk=pk).term
+            for pk in session.planned_item_ids
+        ]
+
+    def test_without_a_word_a_hard_one_never_makes_the_cut(self):
+        with stub_turn():
+            plan = self.planned(self.start())
+        self.assertNotIn('vestirse', plan)
+
+    def test_asking_for_a_word_puts_it_first(self):
+        with stub_turn():
+            plan = self.planned(self.start(word_id=self.hard.pk))
+        self.assertEqual(plan[0], 'vestirse')
+
+    def test_asking_for_a_word_does_not_lengthen_the_session(self):
+        with stub_turn():
+            without = self.planned(self.start())
+            with_word = self.planned(self.start(word_id=self.hard.pk))
+        self.assertEqual(len(with_word), len(without))
+
+    def test_asking_for_a_word_does_not_duplicate_it(self):
+        easy = VocabItem.objects.get(term='facil0')
+        with stub_turn():
+            plan = self.planned(self.start(word_id=easy.pk))
+        self.assertEqual(plan[0], 'facil0')
+        self.assertEqual(plan.count('facil0'), 1)
+
+    def test_a_word_from_another_topic_is_refused(self):
+        with stub_turn():
+            response = self.start(word_id=self.other_topic.pk)
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_word_from_another_language_is_refused(self):
+        with stub_turn():
+            response = self.start(word_id=self.other_language.pk)
+        self.assertEqual(response.status_code, 400)
+
+    def test_an_unknown_word_id_is_refused(self):
+        with stub_turn():
+            response = self.start(word_id=999999)
+        self.assertEqual(response.status_code, 400)
+
+
+class ShelfPartitionTests(TestCase):
+    """The four shelves must partition the collection, with nothing lost.
+
+    An empty "to review" shelf right after a lesson looks like a bug and is
+    not one - SM-2 has pushed those words into the future deliberately. These
+    pin the boundaries so the counts can be trusted when they look surprising.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='shelved')
+        self.token = Token.objects.create(user=self.user)
+        Profile.objects.create(user=self.user, learning_language='Spanish')
+        self.items = [
+            VocabItem.objects.create(
+                language='Spanish', topic=TOPIC, term=f'palabra{n}',
+                english=f'word {n}')
+            for n in range(5)
+        ]
+
+    def state(self, index, **fields):
+        state, _ = UserVocabState.objects.get_or_create(
+            user=self.user, item=self.items[index])
+        for key, value in fields.items():
+            setattr(state, key, value)
+        state.save()
+        return state
+
+    def shelves(self):
+        response = self.client.get(
+            reverse('vocabulary-list'),
+            HTTP_AUTHORIZATION=f'Token {self.token.key}')
+        return response.json()
+
+    def test_a_word_practised_today_is_not_due_today(self):
+        # The exact case that looked broken: reviewed, scheduled for tomorrow.
+        self.state(0, total_reviews=1, correct_reviews=1, repetitions=1,
+                   interval_days=1,
+                   due_date=timezone.localdate() + timedelta(days=1))
+        body = self.shelves()
+        self.assertEqual(body['counts']['due'], 0)
+        self.assertEqual(body['counts']['learning'], 1)
+
+    def test_an_overdue_word_is_due(self):
+        self.state(0, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate() - timedelta(days=3))
+        self.assertEqual(self.shelves()['counts']['due'], 1)
+
+    def test_a_word_due_exactly_today_is_due(self):
+        self.state(0, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate())
+        self.assertEqual(self.shelves()['counts']['due'], 1)
+
+    def test_three_in_a_row_is_mastered_and_two_is_not(self):
+        self.state(0, total_reviews=3, correct_reviews=3, repetitions=2,
+                   due_date=timezone.localdate() + timedelta(days=6))
+        self.state(1, total_reviews=3, correct_reviews=3, repetitions=3,
+                   due_date=timezone.localdate() + timedelta(days=15))
+        counts = self.shelves()['counts']
+        self.assertEqual(counts['mastered'], 1)
+        self.assertEqual(counts['learning'], 1)
+
+    def test_mastered_wins_over_due(self):
+        # A well-known word that has come round again is still mastered;
+        # otherwise it would be counted twice.
+        self.state(0, total_reviews=4, correct_reviews=4, repetitions=4,
+                   due_date=timezone.localdate())
+        counts = self.shelves()['counts']
+        self.assertEqual(counts['mastered'], 1)
+        self.assertEqual(counts['due'], 0)
+
+    def test_the_shelves_always_add_up_to_the_collection(self):
+        self.state(0, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate() + timedelta(days=1))
+        self.state(1, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate() - timedelta(days=1))
+        self.state(2, total_reviews=5, correct_reviews=5, repetitions=3,
+                   due_date=timezone.localdate() + timedelta(days=20))
+
+        body = self.shelves()
+        counts = body['counts']
+        self.assertEqual(
+            counts['due'] + counts['learning'] + counts['mastered'] + counts['new'],
+            len(self.items))
+        self.assertEqual(body['total'], len(self.items))
+
+    def test_no_word_appears_on_two_shelves(self):
+        self.state(0, total_reviews=1, repetitions=1,
+                   due_date=timezone.localdate())
+        self.state(1, total_reviews=9, correct_reviews=9, repetitions=5,
+                   due_date=timezone.localdate())
+
+        shelves = self.shelves()['shelves']
+        seen = [word['id'] for shelf in shelves.values() for word in shelf]
+        self.assertEqual(len(seen), len(set(seen)))
+
+    def test_saved_is_a_cross_cut_not_a_shelf(self):
+        # A saved word still sits on whichever shelf it belongs to.
+        self.state(0, total_reviews=1, repetitions=1, is_saved=True,
+                   due_date=timezone.localdate() + timedelta(days=1))
+        body = self.shelves()
+        self.assertEqual(len(body['saved']), 1)
+        self.assertEqual(body['counts']['learning'], 1)
+        self.assertEqual(
+            body['counts']['due'] + body['counts']['learning']
+            + body['counts']['mastered'] + body['counts']['new'],
+            len(self.items))

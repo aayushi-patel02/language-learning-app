@@ -15,7 +15,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from tutor import llm
-from tutor.models import TOPIC_SLUGS, VocabItem
+from tutor.models import DEFAULT_LANGUAGE, LANGUAGES, TOPIC_SLUGS, VocabItem
 
 # Which env var holds the key and model for each provider.
 PROVIDER_ENV = {
@@ -46,6 +46,12 @@ class Command(BaseCommand):
             default=TOPIC_SLUGS[0],
             choices=TOPIC_SLUGS,
             help='Topic to request a turn for.',
+        )
+        parser.add_argument(
+            '--language',
+            default=DEFAULT_LANGUAGE,
+            choices=LANGUAGES + ['all'],
+            help='Language to request a turn in, or "all" to try each.',
         )
 
     def handle(self, *args, **options):
@@ -82,7 +88,12 @@ class Command(BaseCommand):
                 'Set DEMO_MODE=false to test the live path.'
             ))
 
-        return self.try_one_turn(options['topic'])
+        if options['language'] == 'all':
+            return all([
+                self.try_one_turn(options['topic'], language)
+                for language in LANGUAGES
+            ])
+        return self.try_one_turn(options['topic'], options['language'])
 
     def list_models(self, provider):
         """Print the models this key can reach, and flag a bad model name.
@@ -153,30 +164,31 @@ class Command(BaseCommand):
         response.raise_for_status()
         return sorted(entry['id'] for entry in response.json().get('data', []))
 
-    def try_one_turn(self, topic):
+    def try_one_turn(self, topic, language=DEFAULT_LANGUAGE):
         self.stdout.write('')
-        self.stdout.write(self.style.MIGRATE_HEADING(f'Live turn ({topic})'))
+        self.stdout.write(
+            self.style.MIGRATE_HEADING(f'Live turn ({language}, {topic})'))
 
-        due = list(VocabItem.objects.filter(topic=topic)[:3])
+        due = list(VocabItem.objects.filter(language=language, topic=topic)[:3])
         if not due:
             self.stdout.write(self.style.WARNING(
                 '  no vocab seeded - run `python manage.py seed_vocab` first'
             ))
 
         started = time.time()
-        turn = llm.get_next_turn(topic, due_items=due, history=[])
+        turn = llm.get_next_turn(topic, language, due_items=due, history=[])
         elapsed = time.time() - started
 
         used_fallback = turn['provider'] in ('fallback', 'demo')
         self.stdout.write(f"  provider       {turn['provider']}  ({elapsed:.1f}s)")
-        self.stdout.write(f"  tutor          {turn['tutor_message_es']}")
+        self.stdout.write(f"  tutor          {turn['tutor_message']}")
         self.stdout.write(f"  translation    {turn['tutor_message_en']}")
         self.stdout.write(f"  target         {turn['target_word'] or '(none given)'}")
 
         correct = sum(reply['is_correct'] for reply in turn['replies'])
         for reply in turn['replies']:
             mark = self.style.SUCCESS('correct') if reply['is_correct'] else '  wrong'
-            self.stdout.write(f"  [{mark}] {reply['es']}")
+            self.stdout.write(f"  [{mark}] {reply['text']}")
             if reply['why_wrong']:
                 self.stdout.write(f"             {reply['why_wrong']}")
 
