@@ -125,7 +125,7 @@ export default function Profile() {
             onClick={() => change('avatar', emoji)}
             aria-label={`Choose ${emoji}`}
             aria-pressed={draft.avatar === emoji}
-            className={`flex h-12 w-12 items-center justify-center rounded-xl border-2
+            className={`flex h-12 w-12 items-center justify-center rounded-xl border
                         text-2xl transition-colors ${
                           draft.avatar === emoji
                             ? 'border-learner bg-surface'
@@ -146,7 +146,7 @@ export default function Profile() {
             value={draft.display_name}
             onChange={(event) => change('display_name', event.target.value)}
             placeholder="Your name"
-            className="mt-2.5 min-h-12 w-full rounded-xl border-2 border-line bg-white
+            className="mt-2.5 min-h-12 w-full rounded-xl border border-line bg-white
                        px-3.5 py-2.5 text-base focus:border-learner focus:outline-none"
           />
         </>
@@ -186,14 +186,14 @@ export default function Profile() {
             navigate('/welcome', { replace: true })
           }}
           className="btn-3d flex min-h-12 w-full items-center justify-center rounded-2xl
-                     border-2 border-line bg-white px-4 py-3 text-sm font-extrabold
+                     border border-line bg-white px-4 py-3 text-sm font-extrabold
                      tracking-wide uppercase hover:bg-surface"
         >
           Log out
         </button>
 
         {confirmingDelete ? (
-          <div className="rounded-2xl border-2 border-error bg-error-soft px-4 py-3.5">
+          <div className="rounded-2xl border border-error bg-error-soft px-4 py-3.5">
             <p className="text-sm font-bold text-error">Delete this account?</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
               Every word you have learned and every conversation goes with it.
@@ -212,7 +212,7 @@ export default function Profile() {
               <button
                 type="button"
                 onClick={() => setConfirmingDelete(false)}
-                className="btn-3d min-h-11 flex-1 rounded-xl border-2 border-line
+                className="btn-3d min-h-11 flex-1 rounded-xl border border-line
                            bg-white px-3 py-2 text-xs font-extrabold tracking-wide
                            uppercase"
               >

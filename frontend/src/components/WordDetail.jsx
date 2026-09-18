@@ -286,13 +286,19 @@ function BookmarkIcon({ filled }) {
       viewBox="0 0 24 24"
       fill={filled ? 'currentColor' : 'none'}
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="1.9"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className="h-3.5 w-3.5"
+      className="h-4 w-4"
     >
-      <path d="M6 3h12v18l-6-5-6 5V3Z" />
+      {/* Rounded corners and a shallower notch. The old path was a bare
+          rectangle with a deep V cut out of it, which at 14px read as an
+          arrow pointing down rather than a bookmark. */}
+      <path
+        d="M6.75 3.75h10.5a.9.9 0 0 1 .9.9v14.9a.7.7 0 0 1-1.11.57L12 16.4
+           l-5.04 3.72a.7.7 0 0 1-1.11-.57V4.65a.9.9 0 0 1 .9-.9Z"
+      />
     </svg>
   )
 }

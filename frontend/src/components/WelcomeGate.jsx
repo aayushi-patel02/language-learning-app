@@ -59,7 +59,7 @@ export default function WelcomeGate() {
         <button
           type="button"
           onClick={() => navigate('/login')}
-          className="btn-3d min-h-12 w-full rounded-2xl border-2 border-line bg-white
+          className="btn-3d min-h-12 w-full rounded-2xl border border-line bg-white
                      px-4 py-3 text-sm font-extrabold tracking-wide uppercase
                      hover:bg-surface"
         >

@@ -124,7 +124,7 @@ export default function Recap() {
         <Link
           to="/"
           className="btn-3d flex min-h-12 items-center justify-center rounded-2xl
-                     border-2 border-line bg-white px-4 py-3 text-sm font-extrabold
+                     border border-line bg-white px-4 py-3 text-sm font-extrabold
                      tracking-wide uppercase hover:bg-surface"
         >
           Back to topics

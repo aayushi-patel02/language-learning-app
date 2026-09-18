@@ -272,10 +272,11 @@ function Shell({ topic, progress, children }) {
         <Link
           to="/"
           aria-label="Leave this lesson"
-          className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
-                     text-lg text-muted transition hover:text-ink"
+          className="-ml-1 inline-flex h-11 w-11 shrink-0 items-center justify-center
+                     rounded-full text-muted transition-colors hover:bg-surface
+                     hover:text-ink"
         >
-          &times;
+          <CloseIcon />
         </Link>
         {total > 0 ? (
           <div
@@ -478,7 +479,7 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
           type="button"
           onClick={() => onChip(option)}
           disabled={disabled}
-          className="btn-3d w-full rounded-2xl border-2 border-line bg-white px-4 py-3
+          className="btn-3d w-full rounded-2xl border border-line bg-white px-4 py-3
                      text-left hover:border-learner/40 hover:bg-surface
                      disabled:opacity-40 focus:outline-none focus-visible:ring-2
                      focus-visible:ring-learner"
@@ -491,5 +492,24 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
       ))}
 
     </div>
+  )
+}
+
+
+// A stroked cross rather than the × character, which renders thin, sits
+// slightly high in its box and reads as punctuation next to the progress bar.
+function CloseIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      aria-hidden="true"
+      className="h-5 w-5"
+    >
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
   )
 }

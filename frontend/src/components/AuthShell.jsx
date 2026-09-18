@@ -37,7 +37,7 @@ export function Field({ label, hint, invalid, ...props }) {
       <input
         // text-base, not text-sm: iOS Safari zooms the whole page when a
         // focused input is under 16px.
-        className={`min-h-12 w-full rounded-xl border-2 px-3.5 py-2.5 text-base
+        className={`min-h-12 w-full rounded-xl border px-3.5 py-2.5 text-base
                     focus:outline-none ${
                       invalid
                         ? 'border-error bg-error-soft'
