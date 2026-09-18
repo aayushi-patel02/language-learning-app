@@ -110,9 +110,28 @@ ALLOWANCES = {
               'are all correct French.',
     'German': 'Both orders of a dative and accusative object, and shorter '
               'phrasings, are correct German.',
-    'Hindi': 'Dropped subject pronouns, and either Devanagari or Roman '
-             'transliteration, are correct Hindi. Never mark an answer wrong '
-             'for being written in Roman script.',
+    'Hindi': 'Dropped subject pronouns are correct Hindi.',
+}
+
+# What script the tutor writes in. Separate from ALLOWANCES on purpose: the
+# tolerance for Roman script is about the learner's typed answer, and having
+# it in the generation prompt made the model write half a sentence in
+# Devanagari and half in Roman.
+TUTOR_SCRIPT = {
+    'Hindi': (
+        '- Write every Hindi sentence entirely in Devanagari. Never use Roman\n'
+        '  letters for Hindi, and never mix the two scripts inside one\n'
+        '  sentence. This applies to your own line and to every reply.'
+    ),
+}
+
+# Only what the learner types may be in either script.
+LEARNER_SCRIPT = {
+    'Hindi': (
+        'The learner may type in Devanagari or in Roman letters. Never mark an '
+        'answer wrong for the script it is written in, only for the grammar. '
+        'Write your own Hindi in Devanagari either way.'
+    ),
 }
 
 CHIP_TEMPLATE = """\
@@ -138,6 +157,7 @@ ERROR_KINDS
 - If a native speaker would accept the sentence as correct, IT IS NOT WRONG.
   ALLOWANCES
 - Make wrong options tempting, never absurd or comical.
+TUTOR_SCRIPT
 - The three replies must be three DIFFERENT sentences. Never repeat the same
   wording twice, and never mark two identical sentences differently.
 - `why_wrong` must name the specific grammatical error, not a vague judgement,
@@ -183,6 +203,8 @@ Be fair but not generous: a missing accent is "minor", a wrong verb person is
 in one short encouraging English sentence - never a lecture.
 
 What a native speaker accepts, you accept: ALLOWANCES
+LEARNER_SCRIPT
+TUTOR_SCRIPT
 
 Return ONLY a JSON object. No prose, no markdown fences.
 
@@ -215,6 +237,11 @@ def _build_prompt(template, language):
         template
         .replace('ERROR_KINDS', ERROR_KINDS[language])
         .replace('ALLOWANCES', ALLOWANCES[language])
+        # Empty for the Latin-script languages, where there is nothing to
+        # say. These two names must not be substrings of one another, or the
+        # first replacement eats part of the second placeholder.
+        .replace('TUTOR_SCRIPT', TUTOR_SCRIPT.get(language, ''))
+        .replace('LEARNER_SCRIPT', LEARNER_SCRIPT.get(language, ''))
         .replace('LANGUAGE', language)
     )
 

@@ -796,3 +796,42 @@ class DuplicateReplyTests(TestCase):
             {'text': 'tres', 'is_correct': False, 'why_wrong': 'b'},
         ])
         self.assertEqual([c['text'] for c in chips], ['uno', 'dos', 'tres'])
+
+
+class ScriptRuleTests(TestCase):
+    """What the tutor writes and what the learner may type are separate.
+
+    Telling the model that Roman script is acceptable Hindi was meant to
+    stop it marking a romanised answer wrong. In the generation prompt it
+    also licensed writing half a sentence in Devanagari and half in Roman.
+    """
+
+    def test_the_tutor_is_told_to_write_hindi_in_devanagari(self):
+        for template in (llm.CHIP_TEMPLATE, llm.EVAL_TEMPLATE):
+            prompt = llm._build_prompt(template, 'Hindi')
+            self.assertIn('entirely in Devanagari', prompt)
+            self.assertIn('never mix the two scripts', prompt)
+
+    def test_only_the_grader_is_told_to_accept_roman(self):
+        chip = llm._build_prompt(llm.CHIP_TEMPLATE, 'Hindi')
+        evaluate = llm._build_prompt(llm.EVAL_TEMPLATE, 'Hindi')
+        self.assertIn('may type in Devanagari or in Roman letters', evaluate)
+        self.assertNotIn('may type in Devanagari or in Roman letters', chip)
+
+    def test_latin_script_languages_get_no_script_clause(self):
+        for language in ('Spanish', 'French', 'German'):
+            with self.subTest(language=language):
+                prompt = llm._build_prompt(llm.CHIP_TEMPLATE, language)
+                self.assertNotIn('Devanagari', prompt)
+
+    def test_no_placeholder_survives_substitution(self):
+        # TUTOR_SCRIPT was once a substring of INPUT_SCRIPT_RULE, so the
+        # first replacement ate part of the second placeholder's name.
+        placeholders = ('ERROR_KINDS', 'ALLOWANCES', 'TUTOR_SCRIPT',
+                        'LEARNER_SCRIPT')
+        for language in LANGUAGES:
+            for template in (llm.CHIP_TEMPLATE, llm.EVAL_TEMPLATE):
+                prompt = llm._build_prompt(template, language)
+                for name in placeholders:
+                    with self.subTest(language=language, placeholder=name):
+                        self.assertNotIn(name, prompt)
