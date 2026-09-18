@@ -104,9 +104,12 @@ export default function Recap() {
         </ul>
       )}
 
+      {/* The mechanic, not the algorithm's name. This is the moment right
+          after finishing a lesson; someone who wants the detail finds it on
+          a word's own page, next to that word's actual numbers. */}
       <p className="mt-6 text-xs leading-relaxed text-muted">
-        Review dates come from SM-2. A word you got wrong resets to a one-day
-        interval; each correct answer pushes it further out.
+        Get a word right and it comes back a little later each time. Get one
+        wrong and it comes back tomorrow.
       </p>
 
       <div className="mt-8 space-y-2 pb-4">

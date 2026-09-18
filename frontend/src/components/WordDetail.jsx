@@ -146,6 +146,15 @@ export default function WordDetail() {
         </p>
       )}
 
+      {/* Named here rather than on the recap: this is the screen someone
+          opens when they want to know why a date is what it is, and the
+          numbers it explains are right above it. */}
+      <p className="mt-2.5 text-xs leading-relaxed text-muted">
+        These dates come from SM-2, a spaced repetition algorithm. Each
+        correct answer multiplies the gap before you see this word again;
+        getting it wrong sends the gap back to one day.
+      </p>
+
       <h2 className="mt-7 text-xs font-bold tracking-wide text-muted uppercase">
         Where you met it
       </h2>
