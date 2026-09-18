@@ -18,7 +18,7 @@ PASSWORD = 'correct-horse-battery-42'
 class AuthTestCase(TestCase):
     def setUp(self):
         self.item = VocabItem.objects.create(
-            spanish='desayunar', english='to have breakfast',
+            term='desayunar', english='to have breakfast',
             topic='daily_routine',
         )
 
@@ -209,13 +209,39 @@ class LoginTests(AuthTestCase):
             'email': 'learner@example.com', 'password': 'not-it'})
         self.assertEqual(response.status_code, 401)
 
-    def test_the_error_does_not_reveal_whether_the_email_exists(self):
+    def test_an_unknown_email_says_so_rather_than_blaming_the_password(self):
+        response = self.post('auth-login', {
+            'email': 'nobody@example.com', 'password': PASSWORD})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()['field'], 'email')
+
+    def test_a_wrong_password_and_an_unknown_email_are_told_apart(self):
         unknown = self.post('auth-login', {
             'email': 'nobody@example.com', 'password': PASSWORD})
         wrong = self.post('auth-login', {
             'email': 'learner@example.com', 'password': 'not-it'})
-        self.assertEqual(unknown.status_code, wrong.status_code)
-        self.assertEqual(unknown.json()['detail'], wrong.json()['detail'])
+        self.assertNotEqual(unknown.json()['detail'], wrong.json()['detail'])
+
+    def test_a_missing_password_is_named_before_anything_is_checked(self):
+        response = self.post('auth-login', {
+            'email': 'learner@example.com', 'password': ''})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['field'], 'password')
+
+    def test_a_missing_email_is_named(self):
+        response = self.post('auth-login', {'email': '', 'password': PASSWORD})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['field'], 'email')
+
+    def test_an_account_whose_username_is_not_its_email_can_log_in(self):
+        # createsuperuser produces exactly this shape. Authenticating on the
+        # email directly used to lock these accounts out permanently.
+        User.objects.create_user(
+            username='aayushipatel', email='admin@example.com', password=PASSWORD)
+        response = self.post('auth-login', {
+            'email': 'admin@example.com', 'password': PASSWORD})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['token'])
 
     def test_logging_out_revokes_the_token(self):
         token = self.post('auth-login', {
