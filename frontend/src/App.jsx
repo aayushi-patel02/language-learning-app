@@ -25,10 +25,11 @@ import WordDetail from './components/WordDetail'
 
 const ONBOARDED_KEY = 'charla.onboarded'
 
-// The four destinations the tab bar switches between. A lesson and its recap
-// are deliberately absent: a stray tap mid-conversation would abandon the
-// session, and the recap already ends in a deliberate way out.
-const TAB_PATHS = ['/', '/vocabulary', '/progress', '/profile']
+// Where the tab bar is *not* shown: the splash, the welcome gate and the two
+// auth forms. Everything inside the app proper keeps it, a lesson included -
+// the bar is how you get out of one, and hiding it only meant hunting for the
+// close button.
+const BARE_PATHS = ['/welcome', '/signup', '/login']
 
 // The splash is held for a moment even when the session resolves instantly,
 // so it reads as a deliberate opening rather than a flicker on the way past.
@@ -77,10 +78,7 @@ function Shell() {
 
   if (!ready || !splashDone) return <Splash />
 
-  const showTabs =
-    Boolean(user) &&
-    onboarded &&
-    (TAB_PATHS.includes(pathname) || pathname.startsWith('/vocabulary/'))
+  const showTabs = Boolean(user) && onboarded && !BARE_PATHS.includes(pathname)
 
   return (
     <>
