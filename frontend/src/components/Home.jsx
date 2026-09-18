@@ -57,11 +57,11 @@ export default function Home() {
                 ? `${streak} day${streak === 1 ? '' : 's'} in a row. See your progress.`
                 : 'No streak yet. See your progress.'
             }
-            className="flex h-12 shrink-0 items-center justify-center gap-1.5
-                       rounded-2xl border border-line bg-white px-3.5 text-sm
+            className="flex h-12 w-12 shrink-0 items-center justify-center gap-0.5
+                       rounded-2xl border border-line bg-white text-sm
                        font-extrabold transition-colors hover:border-ink/20"
           >
-            <FlameIcon className="text-topic-morning" />
+            <FlameIcon className="h-3.5 w-3.5 text-topic-morning" />
             <span>{streak}</span>
           </Link>
 
@@ -191,7 +191,7 @@ function FlameIcon({ className = '' }) {
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden="true"
-      className={`h-4 w-4 ${className}`}
+      className={className || 'h-4 w-4'}
     >
       <path d="M12.9 2.2c.2 2.3-.7 3.8-2 5.1-1.4 1.4-3.2 2.8-3.2 5.6a6.3 6.3 0 0 0 12.6 0c0-3.4-2.3-5.6-3.6-7.2-.3 1-1 1.7-1.7 2-.1-2.3-1-4.1-2.1-5.5Z" />
       <path d="M9.4 15.6c0-1.6 1.1-2.6 1.8-3.4.6 1 1.4 1.4 2 1.7.5.6 1.2 1.1 1.2 2.1a2.5 2.5 0 0 1-5 0Z" opacity=".45" />
