@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { getTopics } from '../api'
 import { useAuth } from '../auth'
 import { TOPICS } from '../topics'
+import Chevron from './Chevron'
 import TopicIcon from './TopicIcon'
 
 export default function Home() {
@@ -103,11 +104,10 @@ export default function Home() {
             </span>
 
             <span
-              aria-hidden="true"
               className="shrink-0 text-muted transition group-hover:translate-x-0.5
                          group-hover:text-ink"
             >
-              &rsaquo;
+              <Chevron className="h-5 w-5" />
             </span>
           </Link>
         ))}

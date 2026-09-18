@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { getProgress } from '../api'
 import { topicById } from '../topics'
+import Chevron from './Chevron'
 import TopicIcon from './TopicIcon'
 
 function formatMinutes(seconds) {
@@ -39,7 +40,7 @@ export default function Progress() {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </Link>
         <h1 className="text-2xl font-extrabold tracking-tight">Your progress</h1>
       </header>
@@ -188,8 +189,8 @@ function Body({ data }) {
                       <span className="block">{Math.round(word.accuracy * 100)}% right</span>
                     )}
                   </span>
-                  <span aria-hidden="true" className="shrink-0 text-muted">
-                    &rsaquo;
+                  <span className="shrink-0 text-muted">
+                    <Chevron className="h-[18px] w-[18px]" />
                   </span>
                 </Link>
               </li>

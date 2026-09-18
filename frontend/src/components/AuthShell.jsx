@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 
+import Chevron from './Chevron'
+
 /** Shared chrome for the sign-up and log-in screens. */
 export default function AuthShell({ title, subtitle, children }) {
   const navigate = useNavigate()
@@ -14,7 +16,7 @@ export default function AuthShell({ title, subtitle, children }) {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </button>
       </header>
 

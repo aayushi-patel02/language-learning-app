@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { deleteAccount, getLanguages, updateMe } from '../api'
 import { useAuth } from '../auth'
+import Chevron from './Chevron'
 
 const AVATARS = ['🦉', '🐙', '🦊', '🐢', '🦜', '🐝', '🌵', '🍋']
 
@@ -281,7 +282,7 @@ function Shell({ children }) {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </Link>
         <h1 className="text-2xl font-extrabold tracking-tight">Profile</h1>
       </header>

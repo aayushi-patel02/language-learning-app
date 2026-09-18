@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { getVocabulary } from '../api'
 import { formatDue } from '../dates'
 import { canSpeak, speak } from '../speech'
+import Chevron from './Chevron'
 
 // Shelves are mutually exclusive so the tabs partition the collection.
 // Saved and recent are cross-cuts over the same words, kept at the end.
@@ -44,7 +45,7 @@ export default function Vocabulary() {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </Link>
         <h1 className="flex-1 text-2xl font-extrabold tracking-tight">Vocabulary</h1>
         {data && (
@@ -172,8 +173,8 @@ function WordRow({ word }) {
               <span className="block text-[11px] text-learner">saved</span>
             )}
           </span>
-          <span aria-hidden="true" className="shrink-0 text-muted">
-            &rsaquo;
+          <span className="shrink-0 text-muted">
+            <Chevron className="h-[18px] w-[18px]" />
           </span>
         </Link>
       </div>

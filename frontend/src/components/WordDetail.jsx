@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getWord, setWordSaved } from '../api'
 import { formatDue } from '../dates'
 import { canSpeak, speak } from '../speech'
+import Chevron from './Chevron'
 
 const SHELF_LABEL = {
   due: 'Ready to review',
@@ -228,7 +229,7 @@ function Shell({ onBack, saved, onSave, children }) {
           className="-ml-1 inline-flex min-h-11 min-w-11 items-center justify-center
                      text-lg text-muted transition hover:text-ink"
         >
-          &lsaquo;
+          <Chevron direction="left" className="h-6 w-6" />
         </button>
         {onSave && (
           <button
