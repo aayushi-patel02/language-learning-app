@@ -169,6 +169,21 @@ class ProgressTests(ApiTestCase):
         self.assertEqual(body['lessons_completed'], 0)
         self.assertEqual(body['vocabulary_total'], 10)
 
+    def test_the_vocabulary_total_counts_only_this_language(self):
+        """The denominator has to match the by-topic rows under it.
+
+        Counting every language put "42 of 240" directly above a breakdown
+        adding up to 42 of 60.
+        """
+        VocabItem.objects.create(
+            language='German', topic=DAILY_ROUTINE, term='aufstehen',
+            english='to get up', difficulty=1)
+        body = self.client.get(reverse('progress')).json()
+        self.assertEqual(body['vocabulary_total'], 10)
+        self.assertEqual(
+            body['vocabulary_total'],
+            sum(topic['total'] for topic in body['topics']))
+
     def test_scheduler_rows_alone_do_not_count_as_started(self):
         # Starting a lesson creates a state row per item; only an answered
         # word has actually been practised.
