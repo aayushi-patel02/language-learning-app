@@ -510,7 +510,11 @@ class ProgressView(APIView):
         )[:5]
 
         return Response({
-            'vocabulary_total': VocabItem.objects.count(),
+            # Scoped like everything else on this screen. Counting all four
+            # languages reported "42 of 240" directly above a by-topic
+            # breakdown that added up to 42 of 60.
+            'vocabulary_total': VocabItem.objects.filter(
+                language=language).count(),
             'words_started': len(started),
             'words_strong': sum(1 for state in started if is_strong(state)),
             'words_due_today': sum(

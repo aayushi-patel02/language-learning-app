@@ -162,6 +162,10 @@ TUTOR_SCRIPT
   wording twice, and never mark two identical sentences differently.
 - `why_wrong` must name the specific grammatical error, not a vague judgement,
   and that error must actually be present in that reply's text.
+- `en` is a plain translation of that reply and nothing else. Never mark a
+  reply as wrong there, in brackets or any other way. The learner reads all
+  three before answering, so a note there hands them the answer. It is fine
+  and usually right for the three translations to come out identical.
 
 Return ONLY a JSON object. No prose, no markdown fences.
 
@@ -475,6 +479,33 @@ def _clean_str(value):
     return str(value).strip() if value is not None else ''
 
 
+# A reply's 'en' is a translation of that reply. Models sometimes append the
+# mistake to it instead of leaving it in why_wrong, which prints the answer
+# key beside the options: "I read the news", "I read the news (wrong verb
+# agreement)", "I read the news (wrong postposition)". That turns a grammar
+# choice into a reading test, and it is the distractors, not the target
+# language, that give the answer away.
+_LEAKED_VERDICT = re.compile(
+    r'\s*[(\[][^)\]]*\b('
+    r'wrong|incorrect|error|mistake|missing|omits?|should|instead|'
+    r'agreement|conjugation|gender|tense|plural|singular|postposition|'
+    r'preposition|article|ending|form'
+    r')\b[^)\]]*[)\]]\s*$',
+    re.IGNORECASE,
+)
+
+
+def _strip_leaked_verdict(english):
+    """Drop a trailing parenthetical that grades the reply rather than translating it.
+
+    Deliberately narrow: only a bracketed tail, and only when it names a
+    mistake. A gloss like "the bill (the check)" keeps its parenthesis.
+    Stripping can leave two options with the same English, which is correct
+    and is the point: the learner has to choose on the grammar.
+    """
+    return _LEAKED_VERDICT.sub('', english).strip()
+
+
 def _drop_duplicate_replies(chips):
     """Collapse replies that say exactly the same thing.
 
@@ -541,7 +572,8 @@ def _normalise_replies(raw):
         chips.append({
             'id': len(chips),
             'text': text,
-            'en': _clean_str(entry.get('en') or entry.get('english')),
+            'en': _strip_leaked_verdict(
+                _clean_str(entry.get('en') or entry.get('english'))),
             'is_correct': bool(entry.get('is_correct')),
             'why_wrong': _clean_str(entry.get('why_wrong')),
         })

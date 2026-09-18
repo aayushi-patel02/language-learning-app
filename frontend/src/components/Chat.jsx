@@ -476,7 +476,11 @@ function Composer({ current, disabled, typing, draft, setDraft, onChip, onSend }
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => event.key === 'Enter' && onSend()}
-            placeholder="Escribe tu respuesta…"
+            // English, like every other piece of chrome in the app. This
+            // used to be Spanish, which was a leftover from when Spanish was
+            // the only language: a Hindi lesson asked for a reply under
+            // "Escribe tu respuesta".
+            placeholder="Type your answer…"
             disabled={disabled}
             // text-base, not text-sm: iOS Safari zooms the whole page when a
             // focused input is under 16px, which throws off the layout mid-demo.

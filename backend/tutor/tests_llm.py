@@ -798,6 +798,53 @@ class DuplicateReplyTests(TestCase):
         self.assertEqual([c['text'] for c in chips], ['uno', 'dos', 'tres'])
 
 
+class LeakedVerdictTests(TestCase):
+    """A reply's English gloss must not say which reply is wrong.
+
+    Seen live in Hindi: three options translated "I read the news",
+    "I read the news (wrong verb agreement)" and "I read the news (wrong
+    postposition)". The distractors announced themselves, so the turn tested
+    reading English rather than choosing Hindi grammar.
+    """
+
+    HI = ['मैं समाचार पढ़ता हूँ।', 'मैं समाचार पढ़ते हूँ।', 'मैं समाचार पढ़ता को हूँ।']
+
+    def test_a_bracketed_verdict_is_removed(self):
+        chips = llm._normalise_replies([
+            {'text': self.HI[0], 'en': 'I read the news', 'is_correct': True},
+            {'text': self.HI[1], 'en': 'I read the news (wrong verb agreement)',
+             'is_correct': False, 'why_wrong': 'verb agreement'},
+            {'text': self.HI[2], 'en': 'I read the news (wrong postposition)',
+             'is_correct': False, 'why_wrong': 'stray postposition'},
+        ])
+        self.assertEqual([chip['en'] for chip in chips], ['I read the news'] * 3)
+
+    def test_the_reason_still_reaches_why_wrong(self):
+        chips = llm._normalise_replies([
+            {'text': self.HI[0], 'en': 'I read the news', 'is_correct': True},
+            {'text': self.HI[1], 'en': 'I read the news (wrong verb agreement)',
+             'is_correct': False, 'why_wrong': 'verb agreement'},
+        ])
+        self.assertEqual(chips[1]['why_wrong'], 'verb agreement')
+
+    def test_an_ordinary_parenthetical_survives(self):
+        chips = llm._normalise_replies([
+            {'text': 'बिल', 'en': 'the bill (the check)', 'is_correct': True},
+            {'text': 'मेन्यू', 'en': 'the menu', 'is_correct': False,
+             'why_wrong': 'not what was asked'},
+        ])
+        self.assertEqual(chips[0]['en'], 'the bill (the check)')
+
+    def test_a_note_in_the_middle_is_left_alone(self):
+        """Only a trailing tail is stripped; anything else risks eating a translation."""
+        chips = llm._normalise_replies([
+            {'text': 'क', 'en': 'I (wrong) read the news', 'is_correct': True},
+            {'text': 'ख', 'en': 'something else', 'is_correct': False,
+             'why_wrong': 'x'},
+        ])
+        self.assertEqual(chips[0]['en'], 'I (wrong) read the news')
+
+
 class ScriptRuleTests(TestCase):
     """What the tutor writes and what the learner may type are separate.
 
